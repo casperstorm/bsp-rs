@@ -5,3 +5,5 @@ authors = ["Casper Rogild Storm", "tarkah <admin@tarkah.dev>"]
 edition = "2018"
 
 [dependencies]
+byteorder = "1.4.3"
+thiserror = "1.0.24"
