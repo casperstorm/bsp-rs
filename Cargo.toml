@@ -1,0 +1,7 @@
+[package]
+name = "bsp-rs"
+version = "0.1.0"
+authors = ["Casper Rogild Storm", "tarkah <admin@tarkah.dev>"]
+edition = "2018"
+
+[dependencies]
