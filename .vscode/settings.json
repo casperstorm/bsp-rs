@@ -1,0 +1,15 @@
+{
+    "rust-analyzer.assist.importPrefix": "by_self",
+    "rust-analyzer.assist.importMergeBehavior": "last",
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly",
+    ],
+    "rust-analyzer.checkOnSave.overrideCommand": [
+        "cargo",
+        "+nightly",
+        "clippy",
+        "--workspace",
+        "--message-format=json",
+        "--all-targets"
+    ],
+}
