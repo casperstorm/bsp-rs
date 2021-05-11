@@ -3,3 +3,11 @@
 [[package]]
 name = "bsp-rs"
 version = "0.1.0"
+
+[[package]]
+name = "cli"
+version = "0.1.0"
+
+[[package]]
+name = "decoder"
+version = "0.1.0"

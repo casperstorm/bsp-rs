@@ -1,14 +1,7 @@
 [package]
-name = "bsp-rs"
+name = "decoder"
 version = "0.1.0"
 authors = ["Casper Rogild Storm", "tarkah <admin@tarkah.dev>"]
 edition = "2018"
-
-[workspace]
-members = [
-    ".",
-    "crates/cli",
-    "crates/decoder"
-]
 
 [dependencies]
