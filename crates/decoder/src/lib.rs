@@ -21,16 +21,16 @@ impl Bsp {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Header {
     pub ident: u32,
     pub version: u32,
-    pub lumps: Vec<HeaderLump>,
+    pub lumps: [HeaderLump; 64],
     pub map_revision: u32,
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct HeaderLump {
     pub file_offset: u32,
     pub len: u32,
@@ -40,11 +40,8 @@ pub struct HeaderLump {
 
 fn decode_header<R: Read + Seek>(reader: &mut R) -> Result<Header> {
     let ident = reader.read_u32::<LittleEndian>()?;
-
     let version = reader.read_u32::<LittleEndian>()?;
-
-    let lumps = vec![];
-
+    let lumps = [Default::default(); 64];
     let map_revision = reader.read_u32::<LittleEndian>()?;
 
     Ok(Header {
@@ -53,4 +50,16 @@ fn decode_header<R: Read + Seek>(reader: &mut R) -> Result<Header> {
         lumps,
         map_revision,
     })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_header_size() {
+        let size = std::mem::size_of::<Header>();
+
+        assert_eq!(size, 1036);
+    }
 }
