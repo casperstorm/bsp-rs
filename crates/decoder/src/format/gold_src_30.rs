@@ -46,6 +46,7 @@ pub struct GoldSrc30HeaderLump {
     pub len: u32,
 }
 
+#[allow(dead_code)]
 #[repr(usize)]
 #[derive(Debug, Clone, Copy)]
 pub enum GoldSrc30LumpType {
