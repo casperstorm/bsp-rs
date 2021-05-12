@@ -5,7 +5,7 @@ use crate::BspVersion;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Invalid or Unimplemented bsp identifier: {ident}")]
-    InvalidOrUnimplementedIdent { ident: u32 },
+    InvalidOrUnimplementedIdent { ident: i32 },
     #[error("Invalid BspFormat used to decode file of version: {version:?}")]
     InvalidBspFormat { version: BspVersion },
     #[error(transparent)]

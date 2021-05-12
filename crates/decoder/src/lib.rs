@@ -3,6 +3,7 @@ use std::io::{Read, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
+pub(crate) mod common;
 mod error;
 pub mod format;
 
@@ -13,13 +14,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug)]
 pub struct BspDecoder<R: Read + Seek> {
     reader: R,
-    ident: u32,
+    ident: i32,
     version: BspVersion,
 }
 
 impl<R: Read + Seek> BspDecoder<R> {
     pub fn from_reader(mut reader: R) -> Result<Self> {
-        let ident = reader.read_u32::<LittleEndian>()?;
+        let ident = reader.read_i32::<LittleEndian>()?;
 
         let version = BspVersion::from_ident(ident)?;
 
@@ -51,7 +52,7 @@ pub enum BspVersion {
 }
 
 impl BspVersion {
-    fn from_ident(ident: u32) -> Result<BspVersion> {
+    fn from_ident(ident: i32) -> Result<BspVersion> {
         match ident {
             30 => Ok(BspVersion::GoldSrc30),
             _ => Err(Error::InvalidOrUnimplementedIdent { ident }),

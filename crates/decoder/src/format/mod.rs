@@ -8,7 +8,7 @@ pub use gold_src_30::GoldSrc30Bsp;
 
 pub(crate) fn decode<R: Read + Seek>(
     reader: &mut R,
-    ident: u32,
+    ident: i32,
     version: BspVersion,
 ) -> Result<Box<dyn Any>> {
     let format = match version {
