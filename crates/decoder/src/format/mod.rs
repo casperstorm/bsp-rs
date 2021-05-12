@@ -1,17 +1,19 @@
+use std::any::Any;
 use std::io::{Read, Seek};
 
-use crate::{BspHeader, BspVersion, Result};
+use crate::{BspVersion, Result};
 
 mod gold_src_30;
+pub use gold_src_30::GoldSrc30Bsp;
 
-pub(crate) fn decode_header<R: Read + Seek>(
+pub(crate) fn decode<R: Read + Seek>(
     reader: &mut R,
     ident: u32,
     version: BspVersion,
-) -> Result<Box<dyn BspHeader>> {
-    let header = match version {
-        BspVersion::GoldSrc30 => Box::new(gold_src_30::decode_header(reader, ident)?),
+) -> Result<Box<dyn Any>> {
+    let format = match version {
+        BspVersion::GoldSrc30 => Box::new(gold_src_30::decode(reader, ident)?),
     };
 
-    Ok(header)
+    Ok(format)
 }

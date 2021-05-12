@@ -1,20 +1,28 @@
-use std::fmt;
 use std::io::{Read, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::{BspHeader, Result};
+use crate::{BspFormat, Result};
 
 const NUM_LUMPS: usize = 16;
 
-pub(crate) fn decode_header<R: Read + Seek>(reader: &mut R, ident: u32) -> Result<GoldSrc30Header> {
+#[derive(Debug, Clone, Copy)]
+pub struct GoldSrc30Bsp {
+    pub header: GoldSrc30Header,
+}
+
+impl BspFormat for GoldSrc30Bsp {}
+
+pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: u32) -> Result<GoldSrc30Bsp> {
     let mut lumps = [Default::default(); NUM_LUMPS];
 
     for lump in lumps.iter_mut() {
         *lump = decode_header_lump(reader)?;
     }
 
-    Ok(GoldSrc30Header { ident, lumps })
+    let header = GoldSrc30Header { ident, lumps };
+
+    Ok(GoldSrc30Bsp { header })
 }
 
 fn decode_header_lump<R: Read + Seek>(reader: &mut R) -> Result<GoldSrc30HeaderLump> {
@@ -25,21 +33,10 @@ fn decode_header_lump<R: Read + Seek>(reader: &mut R) -> Result<GoldSrc30HeaderL
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct GoldSrc30Header {
     pub ident: u32,
     pub lumps: [GoldSrc30HeaderLump; 16],
-}
-
-impl BspHeader for GoldSrc30Header {}
-
-impl fmt::Debug for GoldSrc30Header {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Header")
-            .field("ident", &self.ident)
-            .field("lumps", &self.lumps)
-            .finish()
-    }
 }
 
 #[repr(C)]
@@ -47,6 +44,27 @@ impl fmt::Debug for GoldSrc30Header {
 pub struct GoldSrc30HeaderLump {
     pub file_offset: u32,
     pub len: u32,
+}
+
+#[repr(usize)]
+#[derive(Debug, Clone, Copy)]
+pub enum GoldSrc30LumpType {
+    Entities,
+    Planes,
+    Textures,
+    Vertices,
+    Visibility,
+    Nodes,
+    Texinfo,
+    Faces,
+    Lighting,
+    Clipnodes,
+    Leaves,
+    Marksurfaces,
+    Edges,
+    Surfedges,
+    Models,
+    HeaderLumps,
 }
 
 #[cfg(test)]
