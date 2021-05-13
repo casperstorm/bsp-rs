@@ -1,56 +1,75 @@
+use std::fmt;
 use std::io::{Read, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
+pub(crate) mod common;
 mod error;
+pub mod format;
+
 pub use error::Error;
+
+use self::format::{gold_src_30, GoldSrc30Bsp};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct Bsp {
-    pub header: Header,
+pub struct BspDecoder<R: Read + Seek> {
+    reader: R,
+    ident: i32,
+    version: BspVersion,
 }
 
-impl Bsp {
-    pub fn from_reader<R: Read + Seek>(mut reader: R) -> Result<Self> {
-        let header = decode_header(&mut reader)?;
+impl<R: Read + Seek> BspDecoder<R> {
+    pub fn from_reader(mut reader: R) -> Result<Self> {
+        let ident = reader.read_i32::<LittleEndian>()?;
 
-        Ok(Bsp { header })
+        let version = BspVersion::from_ident(ident)?;
+
+        Ok(BspDecoder {
+            reader,
+            ident,
+            version,
+        })
+    }
+
+    pub fn version(&self) -> BspVersion {
+        self.version
+    }
+
+    pub fn decode_any<T: 'static + BspFormat>(mut self) -> Result<Box<T>> {
+        let version = self.version;
+
+        let decoded = format::decode(&mut self.reader, self.ident, version)?;
+
+        decoded
+            .downcast::<T>()
+            .map_err(|_| Error::InvalidBspFormat { version })
+    }
+
+    pub fn decode_gold_src_30(&mut self) -> Result<GoldSrc30Bsp> {
+        if self.version != BspVersion::GoldSrc30 {
+            Err(Error::InvalidBspFormat {
+                version: self.version,
+            })
+        } else {
+            gold_src_30::decode(&mut self.reader, self.ident)
+        }
     }
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct Header {
-    pub ident: u32,
-    pub version: u32,
-    pub lumps: Vec<HeaderLump>,
-    pub map_revision: u32,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BspVersion {
+    GoldSrc30,
 }
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct HeaderLump {
-    pub file_offset: u32,
-    pub len: u32,
-    pub version: u32,
-    pub four_cc: [u8; 4],
+impl BspVersion {
+    fn from_ident(ident: i32) -> Result<BspVersion> {
+        match ident {
+            30 => Ok(BspVersion::GoldSrc30),
+            _ => Err(Error::InvalidOrUnimplementedIdent { ident }),
+        }
+    }
 }
 
-fn decode_header<R: Read + Seek>(reader: &mut R) -> Result<Header> {
-    let ident = reader.read_u32::<LittleEndian>()?;
-
-    let version = reader.read_u32::<LittleEndian>()?;
-
-    let lumps = vec![];
-
-    let map_revision = reader.read_u32::<LittleEndian>()?;
-
-    Ok(Header {
-        ident,
-        version,
-        lumps,
-        map_revision,
-    })
-}
+pub trait BspFormat: fmt::Debug {}
