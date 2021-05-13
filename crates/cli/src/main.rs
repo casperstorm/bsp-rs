@@ -16,7 +16,7 @@ fn main() {
                 let decoder = decoder::BspDecoder::from_reader(reader).unwrap();
 
                 match decoder.version() {
-                    decoder::BspVersion::GoldSrc30 => decoder.decode::<GoldSrc30Bsp>(),
+                    decoder::BspVersion::GoldSrc30 => decoder.decode_any::<GoldSrc30Bsp>(),
                 }
             }
             .unwrap();

@@ -9,6 +9,8 @@ pub mod format;
 
 pub use error::Error;
 
+use self::format::{gold_src_30, GoldSrc30Bsp};
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
@@ -35,7 +37,7 @@ impl<R: Read + Seek> BspDecoder<R> {
         self.version
     }
 
-    pub fn decode<T: 'static + BspFormat>(mut self) -> Result<Box<T>> {
+    pub fn decode_any<T: 'static + BspFormat>(mut self) -> Result<Box<T>> {
         let version = self.version;
 
         let decoded = format::decode(&mut self.reader, self.ident, version)?;
@@ -44,9 +46,19 @@ impl<R: Read + Seek> BspDecoder<R> {
             .downcast::<T>()
             .map_err(|_| Error::InvalidBspFormat { version })
     }
+
+    pub fn decode_gold_src_30(&mut self) -> Result<GoldSrc30Bsp> {
+        if self.version != BspVersion::GoldSrc30 {
+            Err(Error::InvalidBspFormat {
+                version: self.version,
+            })
+        } else {
+            gold_src_30::decode(&mut self.reader, self.ident)
+        }
+    }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BspVersion {
     GoldSrc30,
 }
