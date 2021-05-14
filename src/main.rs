@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 mod plugins;
-use plugins::fps::FpsPlugin;
+use plugins::ui::UiPlugin;
 
 struct ButtonMaterials {
     normal: Handle<ColorMaterial>,
@@ -24,7 +24,7 @@ fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
         .init_resource::<ButtonMaterials>()
-        .add_plugin(FpsPlugin)
+        .add_plugin(UiPlugin)
         .add_startup_system(setup.system())
         .add_system(button_system.system())
         .run();
