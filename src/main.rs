@@ -1,7 +1,7 @@
-use bevy::diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
-struct FpsText;
+mod plugins;
+use plugins::fps::FpsPlugin;
 
 struct ButtonMaterials {
     normal: Handle<ColorMaterial>,
@@ -24,9 +24,8 @@ fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
         .init_resource::<ButtonMaterials>()
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .add_plugin(FpsPlugin)
         .add_startup_system(setup.system())
-        .add_system(text_update_system.system())
         .add_system(button_system.system())
         .run();
 }
@@ -64,36 +63,6 @@ fn setup(
     // UI camera
     commands.spawn_bundle(UiCameraBundle::default());
     commands
-        .spawn_bundle(TextBundle {
-            style: Style {
-                align_self: AlignSelf::FlexEnd,
-                ..Default::default()
-            },
-            text: Text {
-                sections: vec![
-                    TextSection {
-                        value: "FPS:".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/iosevka-bold.ttf"),
-                            font_size: 60.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/iosevka-regular.ttf"),
-                            font_size: 60.0,
-                            color: Color::GOLD,
-                        },
-                    },
-                ],
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-        .insert(FpsText);
-    commands
         .spawn_bundle(ButtonBundle {
             style: Style {
                 size: Size::new(Val::Px(150.0), Val::Px(65.0)),
@@ -125,17 +94,6 @@ fn setup(
                 ..Default::default()
             });
         });
-}
-
-fn text_update_system(diagnostics: Res<Diagnostics>, mut query: Query<&mut Text, With<FpsText>>) {
-    for mut text in query.iter_mut() {
-        if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
-            if let Some(average) = fps.average() {
-                // Update the value of the second section
-                text.sections[1].value = format!("{:.2}", average);
-            }
-        }
-    }
 }
 
 #[allow(clippy::type_complexity)]
