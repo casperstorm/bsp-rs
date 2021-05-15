@@ -37,6 +37,8 @@ pub struct GoldSrc30Bsp {
     pub models: [Option<Model>; MAX_MAP_MODELS],
     pub planes: [Option<Plane>; MAX_MAP_PLANES],
     pub edges: [Option<Edge>; MAX_MAP_EDGES],
+    pub lighting: [Option<Lighting>; MAX_MAP_LIGHTING],
+    pub vertices: [Option<Vertex>; MAX_MAP_VERTS],
 }
 
 impl BspFormat for GoldSrc30Bsp {}
@@ -46,8 +48,10 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
     let models = decode_lump::<Model, R, MAX_MAP_MODELS>(reader, &header, LumpType::Models)?;
     let planes = decode_lump::<Plane, R, MAX_MAP_PLANES>(reader, &header, LumpType::Planes)?;
     let edges = decode_lump::<Edge, R, MAX_MAP_EDGES>(reader, &header, LumpType::Edges)?;
+    let lighting = decode_lump::<Lighting, R, MAX_MAP_LIGHTING>(reader, &header, LumpType::Lighting)?;
+    let vertices = decode_lump::<Vertex, R, MAX_MAP_VERTS>(reader, &header, LumpType::Vertices)?;
 
-    Ok(GoldSrc30Bsp { header, models, planes, edges })
+    Ok(GoldSrc30Bsp { header, models, planes, edges,  lighting, vertices })
 }
 
 fn decode_header<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<Header> {
@@ -217,6 +221,53 @@ impl Lump for Edge {
             Edge {
                 vertex: read_uvec2_u16(reader)?,
             }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SurfEdge(pub i32);
+
+impl Lump for SurfEdge {
+    type Output = SurfEdge;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<SurfEdge> {
+        Ok(
+            SurfEdge(reader.read_i32::<LittleEndian>()?)
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Lighting {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl Lump for Lighting {
+    type Output = Lighting;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Lighting> {
+        Ok(
+            Lighting{
+                r: reader.read_u8()?,
+                g: reader.read_u8()?,
+                b: reader.read_u8()?,
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Vertex(pub glam::Vec3);
+
+impl Lump for Vertex {
+    type Output = Vertex;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Vertex> {
+        Ok(
+            Vertex(read_vec3(reader)?)
         )
     }
 }
