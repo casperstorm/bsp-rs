@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::convert::TryFrom;
+use std::fmt;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
@@ -31,27 +32,38 @@ const MAX_MAP_LIGHTING: usize = 0x200000;
 const MAX_MAP_VISIBILITY: usize = 0x200000;
 const MAX_MAP_PORTALS: usize = 65536;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone)]
 pub struct GoldSrc30Bsp {
-    header: Header,
-    pub models: [Option<Model>; MAX_MAP_MODELS],
-    pub planes: [Option<Plane>; MAX_MAP_PLANES],
-    pub edges: [Option<Edge>; MAX_MAP_EDGES],
-    pub lighting: [Option<Lighting>; MAX_MAP_LIGHTING],
-    pub vertices: [Option<Vertex>; MAX_MAP_VERTS],
+    pub models: Vec<Model>,
+    pub planes: Vec<Plane>,
+    pub edges: Vec<Edge>,
+    pub lighting: Vec<Lighting>,
+    pub vertices: Vec<Vertex>,
+}
+
+impl fmt::Debug for GoldSrc30Bsp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GoldSrc30Bsp")
+            .field("models", &format!("{} models", self.models.len()))
+            .field("planes", &format!("{} planes", self.planes.len()))
+            .field("edges", &format!("{} edges", self.edges.len()))
+            .field("lighting", &format!("{} lighting", self.lighting.len()))
+            .field("vertices", &format!("{} verices", self.vertices.len()))
+            .finish()
+    }
 }
 
 impl BspFormat for GoldSrc30Bsp {}
 
 pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldSrc30Bsp> {
     let header = decode_header(reader, ident)?;
-    let models = decode_lump::<Model, R, MAX_MAP_MODELS>(reader, &header, LumpType::Models)?;
-    let planes = decode_lump::<Plane, R, MAX_MAP_PLANES>(reader, &header, LumpType::Planes)?;
-    let edges = decode_lump::<Edge, R, MAX_MAP_EDGES>(reader, &header, LumpType::Edges)?;
-    let lighting = decode_lump::<Lighting, R, MAX_MAP_LIGHTING>(reader, &header, LumpType::Lighting)?;
-    let vertices = decode_lump::<Vertex, R, MAX_MAP_VERTS>(reader, &header, LumpType::Vertices)?;
+    let models = decode_lump::<Model, R>(reader, &header, LumpType::Models)?;
+    let planes = decode_lump::<Plane, R>(reader, &header, LumpType::Planes)?;
+    let edges = decode_lump::<Edge, R>(reader, &header, LumpType::Edges)?;
+    let lighting = decode_lump::<Lighting, R>(reader, &header, LumpType::Lighting)?;
+    let vertices = decode_lump::<Vertex, R>(reader, &header, LumpType::Vertices)?;
 
-    Ok(GoldSrc30Bsp { header, models, planes, edges,  lighting, vertices })
+    Ok(GoldSrc30Bsp { models, planes, edges,  lighting, vertices })
 }
 
 fn decode_header<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<Header> {
@@ -71,20 +83,20 @@ fn decode_header_lump<R: Read + Seek>(reader: &mut R) -> Result<HeaderLump> {
     Ok(HeaderLump { file_offset, len })
 }
 
-fn decode_lump<L: Lump, R: Read + Seek, const MAX_ITEMS: usize>(
+fn decode_lump<L: Lump, R: Read + Seek>(
     reader: &mut R,
     header: &Header,
     lump_type: LumpType,
-) -> Result<[Option<L::Output>; MAX_ITEMS]> {
+) -> Result<Vec<L::Output>> {
     let lump = header.lumps[lump_type as usize];
 
     reader.seek(SeekFrom::Start(lump.file_offset as u64))?;
 
     let num_items = lump.len as usize / size_of::<L>();
-    let mut items = [None; MAX_ITEMS];
+    let mut items = Vec::with_capacity(num_items);
 
-    for item in items[0..num_items].iter_mut() {
-        *item = Some(L::decode(reader)?);
+    for _ in 0..num_items {
+        items.push(L::decode(reader)?);
     }
 
     Ok(items)

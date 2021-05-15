@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
 
-use decoder::format::GoldSrc30Bsp;
 use structopt::StructOpt;
 
 fn main() {
@@ -13,10 +12,10 @@ fn main() {
             let reader = BufReader::new(File::open(path).unwrap());
 
             let bsp = {
-                let decoder = decoder::BspDecoder::from_reader(reader).unwrap();
+                let mut decoder = decoder::BspDecoder::from_reader(reader).unwrap();
 
                 match decoder.version() {
-                    decoder::BspVersion::GoldSrc30 => decoder.decode_any::<GoldSrc30Bsp>(),
+                    decoder::BspVersion::GoldSrc30 => decoder.decode_gold_src_30(),
                 }
             }
             .unwrap();
