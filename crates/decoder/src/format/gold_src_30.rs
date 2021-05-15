@@ -14,25 +14,6 @@ use crate::{Error, Result};
 
 const NUM_LUMPS: usize = 16;
 const MAX_MAP_HULLS: usize = 4;
-const MAX_MAP_MODELS: usize = 400;
-const MAX_MAP_BRUSHES: usize = 4096;
-const MAX_MAP_ENTITIES: usize = 1024;
-const MAX_MAP_ENTSTRING: usize = 128 * 1024;
-const MAX_MAP_PLANES: usize = 32767;
-const MAX_MAP_NODES: usize = 32767;
-const MAX_MAP_CLIPNODES: usize = 32767;
-const MAX_MAP_LEAFS: usize = 8192;
-const MAX_MAP_VERTS: usize = 65535;
-const MAX_MAP_FACES: usize = 65535;
-const MAX_MAP_MARKSURFACES: usize = 65535;
-const MAX_MAP_TEXINFO: usize = 8192;
-const MAX_MAP_EDGES: usize = 256000;
-const MAX_MAP_SURFEDGES: usize = 512000;
-const MAX_MAP_TEXTURES: usize = 512;
-const MAX_MAP_MIPTEX: usize = 0x200000;
-const MAX_MAP_LIGHTING: usize = 0x200000;
-const MAX_MAP_VISIBILITY: usize = 0x200000;
-const MAX_MAP_PORTALS: usize = 65536;
 
 #[derive(Clone)]
 pub struct GoldSrc30Bsp {
