@@ -3,7 +3,7 @@ use std::io::{Read, Seek};
 
 use crate::{BspVersion, Result};
 
-pub(crate) mod gold_src_30;
+pub mod gold_src_30;
 pub use gold_src_30::GoldSrc30Bsp;
 
 pub(crate) fn decode<R: Read + Seek>(

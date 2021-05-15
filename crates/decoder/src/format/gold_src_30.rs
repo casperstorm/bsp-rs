@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 
+use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::size_of;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::common::{read_array_f32, read_array_i32, read_vec3};
-use crate::{BspFormat, Result};
+use crate::common::{read_array_f32, read_array_i32, read_uvec2_u16, read_vec3};
+use crate::{BspFormat, Error, Result};
 
 const NUM_LUMPS: usize = 16;
 const MAX_MAP_HULLS: usize = 4;
@@ -33,16 +34,20 @@ const MAX_MAP_PORTALS: usize = 65536;
 #[derive(Debug, Clone, Copy)]
 pub struct GoldSrc30Bsp {
     header: Header,
-    models: [Option<Model>; MAX_MAP_MODELS],
+    pub models: [Option<Model>; MAX_MAP_MODELS],
+    pub planes: [Option<Plane>; MAX_MAP_PLANES],
+    pub edges: [Option<Edge>; MAX_MAP_EDGES],
 }
 
 impl BspFormat for GoldSrc30Bsp {}
 
 pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldSrc30Bsp> {
     let header = decode_header(reader, ident)?;
-    let models = decode_models(reader, &header)?;
+    let models = decode_lump::<Model, R, MAX_MAP_MODELS>(reader, &header, LumpType::Models)?;
+    let planes = decode_lump::<Plane, R, MAX_MAP_PLANES>(reader, &header, LumpType::Planes)?;
+    let edges = decode_lump::<Edge, R, MAX_MAP_EDGES>(reader, &header, LumpType::Edges)?;
 
-    Ok(GoldSrc30Bsp { header, models })
+    Ok(GoldSrc30Bsp { header, models, planes, edges })
 }
 
 fn decode_header<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<Header> {
@@ -62,30 +67,23 @@ fn decode_header_lump<R: Read + Seek>(reader: &mut R) -> Result<HeaderLump> {
     Ok(HeaderLump { file_offset, len })
 }
 
-fn decode_models<R: Read + Seek>(
+fn decode_lump<L: Lump, R: Read + Seek, const MAX_ITEMS: usize>(
     reader: &mut R,
     header: &Header,
-) -> Result<[Option<Model>; MAX_MAP_MODELS]> {
-    let lump = header.lumps[LumpType::Models as usize];
+    lump_type: LumpType,
+) -> Result<[Option<L::Output>; MAX_ITEMS]> {
+    let lump = header.lumps[lump_type as usize];
 
     reader.seek(SeekFrom::Start(lump.file_offset as u64))?;
 
-    let num_models = lump.len as usize / size_of::<Model>();
-    let mut models = [Default::default(); MAX_MAP_MODELS];
+    let num_items = lump.len as usize / size_of::<L>();
+    let mut items = [None; MAX_ITEMS];
 
-    for model in models[0..num_models].iter_mut() {
-        *model = Some(Model {
-            mins: read_array_f32(reader)?,
-            maxs: read_array_f32(reader)?,
-            origin: read_vec3(reader)?,
-            idx_head_nodes: read_array_i32(reader)?,
-            num_vis_leafs: reader.read_i32::<LittleEndian>()?,
-            idx_first_face: reader.read_i32::<LittleEndian>()?,
-            num_faces: reader.read_i32::<LittleEndian>()?,
-        });
+    for item in items[0..num_items].iter_mut() {
+        *item = Some(L::decode(reader)?);
     }
 
-    Ok(models)
+    Ok(items)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -121,15 +119,106 @@ enum LumpType {
     HeaderLumps,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-struct Model {
-    mins: [f32; 3],
-    maxs: [f32; 3],
-    origin: glam::Vec3,
-    idx_head_nodes: [i32; MAX_MAP_HULLS],
-    num_vis_leafs: i32,
-    idx_first_face: i32,
-    num_faces: i32,
+trait Lump {
+    type Output: Copy;
+
+    fn decode<R: Read + Seek>(
+        reader: &mut R,
+    ) -> Result<Self::Output>;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Model {
+    pub mins: [f32; 3],
+    pub maxs: [f32; 3],
+    pub origin: glam::Vec3,
+    pub idx_head_nodes: [i32; MAX_MAP_HULLS],
+    pub num_vis_leafs: i32,
+    pub idx_first_face: i32,
+    pub num_faces: i32,
+}
+
+impl Lump for Model {
+    type Output = Model;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Model> {
+        Ok(
+            Model {
+                mins: read_array_f32(reader)?,
+                maxs: read_array_f32(reader)?,
+                origin: read_vec3(reader)?,
+                idx_head_nodes: read_array_i32(reader)?,
+                num_vis_leafs: reader.read_i32::<LittleEndian>()?,
+                idx_first_face: reader.read_i32::<LittleEndian>()?,
+                num_faces: reader.read_i32::<LittleEndian>()?,
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Plane {
+    pub normal: glam::Vec3,
+    pub dist: f32,
+    pub plane_type: PlaneType,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum PlaneType {
+    X,
+    Y,
+    Z,
+    AnyX,
+    AnyY,
+    AnyZ,
+}
+
+impl TryFrom<i32> for PlaneType {
+    type Error = Error;
+
+    fn try_from(value: i32) -> Result<Self> {
+        match value {
+            0 => Ok(PlaneType::X),
+            1 => Ok(PlaneType::Y),
+            2 => Ok(PlaneType::Z),
+            3 => Ok(PlaneType::AnyX),
+            4 => Ok(PlaneType::AnyY),
+            5 => Ok(PlaneType::AnyZ),
+            _ => Err(Error::Custom(format!("{} not a valid plane type", value))),
+        }
+    }
+}
+
+
+impl Lump for Plane {
+    type Output = Plane;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Plane> {
+        Ok(
+            Plane {
+                normal: read_vec3(reader)?,
+                dist: reader.read_f32::<LittleEndian>()?,
+                plane_type: PlaneType::try_from(reader.read_i32::<LittleEndian>()?)?,
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Edge {
+    pub vertex: glam::UVec2,
+}
+
+impl Lump for Edge {
+    type Output = Edge;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Edge> {
+        Ok(
+            Edge {
+                vertex: read_uvec2_u16(reader)?,
+            }
+        )
+    }
 }
 
 #[cfg(test)]
