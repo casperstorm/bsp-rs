@@ -8,8 +8,8 @@ fn main() {
     App::build()
         .add_plugins(DefaultPlugins)
         .add_plugin(UiPlugin)
-        .add_startup_system(setup.system())
         .add_plugin(FlyCameraPlugin)
+        .add_startup_system(setup.system())
         .run();
 }
 
