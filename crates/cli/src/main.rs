@@ -18,7 +18,9 @@ fn main() {
                 Ok(BspFormat::GoldSrc30(bsp)) => {
                     dbg!(bsp);
                 }
-                Err(e) => {}
+                Err(e) => {
+                    dbg!(&e);
+                }
             }
         }
     }
