@@ -41,9 +41,15 @@ fn setup(
 
     // https://github.com/mcpar-land/bevy_fly_camera
     commands
-        .spawn()
-        .insert_bundle(PerspectiveCameraBundle::new_3d())
-        .insert(FlyCamera::default());
+        .spawn_bundle(PerspectiveCameraBundle {
+            transform: Transform::from_xyz(0.0, 4.0, 10.0),
+            ..Default::default()
+        })
+        .insert(FlyCamera {
+            pitch: 15.0,
+            yaw: -0.0,
+            ..Default::default()
+        });
 
     // UI camera
     commands.spawn_bundle(UiCameraBundle::default());
