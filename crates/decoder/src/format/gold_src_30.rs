@@ -8,7 +8,7 @@ use std::mem::size_of;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::common::{read_array_f32, read_array_i16, read_array_i32, read_uvec2_u16, read_vec3};
-use crate::{BspFormat, Error, Result};
+use crate::{Error, Result};
 
 const NUM_LUMPS: usize = 16;
 const MAX_MAP_HULLS: usize = 4;
@@ -55,8 +55,6 @@ impl fmt::Debug for GoldSrc30Bsp {
     }
 }
 
-impl BspFormat for GoldSrc30Bsp {}
-
 pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldSrc30Bsp> {
     let header = decode_header(reader, ident)?;
     let models = decode_lump::<Model, R>(reader, &header, LumpType::Models)?;
@@ -66,7 +64,14 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
     let vertices = decode_lump::<Vertex, R>(reader, &header, LumpType::Vertices)?;
     let nodes = decode_lump::<Node, R>(reader, &header, LumpType::Nodes)?;
 
-    Ok(GoldSrc30Bsp { models, planes, edges,  lighting, vertices, nodes })
+    Ok(GoldSrc30Bsp {
+        models,
+        planes,
+        edges,
+        lighting,
+        vertices,
+        nodes,
+    })
 }
 
 fn decode_header<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<Header> {
@@ -141,9 +146,7 @@ enum LumpType {
 trait Lump {
     type Output: Copy;
 
-    fn decode<R: Read + Seek>(
-        reader: &mut R,
-    ) -> Result<Self::Output>;
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Self::Output>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -161,17 +164,15 @@ impl Lump for Model {
     type Output = Model;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Model> {
-        Ok(
-            Model {
-                mins: read_array_f32(reader)?,
-                maxs: read_array_f32(reader)?,
-                origin: read_vec3(reader)?,
-                idx_head_nodes: read_array_i32(reader)?,
-                num_vis_leafs: reader.read_i32::<LittleEndian>()?,
-                idx_first_face: reader.read_i32::<LittleEndian>()?,
-                num_faces: reader.read_i32::<LittleEndian>()?,
-            }
-        )
+        Ok(Model {
+            mins: read_array_f32(reader)?,
+            maxs: read_array_f32(reader)?,
+            origin: read_vec3(reader)?,
+            idx_head_nodes: read_array_i32(reader)?,
+            num_vis_leafs: reader.read_i32::<LittleEndian>()?,
+            idx_first_face: reader.read_i32::<LittleEndian>()?,
+            num_faces: reader.read_i32::<LittleEndian>()?,
+        })
     }
 }
 
@@ -208,18 +209,15 @@ impl TryFrom<i32> for PlaneType {
     }
 }
 
-
 impl Lump for Plane {
     type Output = Plane;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Plane> {
-        Ok(
-            Plane {
-                normal: read_vec3(reader)?,
-                dist: reader.read_f32::<LittleEndian>()?,
-                plane_type: PlaneType::try_from(reader.read_i32::<LittleEndian>()?)?,
-            }
-        )
+        Ok(Plane {
+            normal: read_vec3(reader)?,
+            dist: reader.read_f32::<LittleEndian>()?,
+            plane_type: PlaneType::try_from(reader.read_i32::<LittleEndian>()?)?,
+        })
     }
 }
 
@@ -232,11 +230,9 @@ impl Lump for Edge {
     type Output = Edge;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Edge> {
-        Ok(
-            Edge {
-                vertex: read_uvec2_u16(reader)?,
-            }
-        )
+        Ok(Edge {
+            vertex: read_uvec2_u16(reader)?,
+        })
     }
 }
 
@@ -247,9 +243,7 @@ impl Lump for SurfEdge {
     type Output = SurfEdge;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<SurfEdge> {
-        Ok(
-            SurfEdge(reader.read_i32::<LittleEndian>()?)
-        )
+        Ok(SurfEdge(reader.read_i32::<LittleEndian>()?))
     }
 }
 
@@ -264,13 +258,11 @@ impl Lump for Lighting {
     type Output = Lighting;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Lighting> {
-        Ok(
-            Lighting{
-                r: reader.read_u8()?,
-                g: reader.read_u8()?,
-                b: reader.read_u8()?,
-            }
-        )
+        Ok(Lighting {
+            r: reader.read_u8()?,
+            g: reader.read_u8()?,
+            b: reader.read_u8()?,
+        })
     }
 }
 
@@ -281,9 +273,7 @@ impl Lump for Vertex {
     type Output = Vertex;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Vertex> {
-        Ok(
-            Vertex(read_vec3(reader)?)
-        )
+        Ok(Vertex(read_vec3(reader)?))
     }
 }
 
@@ -297,24 +287,20 @@ pub struct Node {
     pub num_faces: u16,
 }
 
-
 impl Lump for Node {
     type Output = Node;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Node> {
-        Ok(
-            Node {
-                idx_plane: reader.read_u32::<LittleEndian>()?,
-                idx_children: read_array_i16(reader)?,
-                mins: read_array_i16(reader)?,
-                maxs: read_array_i16(reader)?,
-                first_face: reader.read_u16::<LittleEndian>()?,
-                num_faces: reader.read_u16::<LittleEndian>()?,
-            }
-        )
+        Ok(Node {
+            idx_plane: reader.read_u32::<LittleEndian>()?,
+            idx_children: read_array_i16(reader)?,
+            mins: read_array_i16(reader)?,
+            maxs: read_array_i16(reader)?,
+            first_face: reader.read_u16::<LittleEndian>()?,
+            num_faces: reader.read_u16::<LittleEndian>()?,
+        })
     }
 }
-
 
 #[cfg(test)]
 mod test {

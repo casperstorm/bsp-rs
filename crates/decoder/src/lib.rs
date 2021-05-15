@@ -1,4 +1,3 @@
-use std::fmt;
 use std::io::{Read, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
@@ -37,14 +36,10 @@ impl<R: Read + Seek> BspDecoder<R> {
         self.version
     }
 
-    pub fn decode_any<T: 'static + BspFormat>(mut self) -> Result<Box<T>> {
+    pub fn decode_any(mut self) -> Result<BspFormat> {
         let version = self.version;
 
-        let decoded = format::decode(&mut self.reader, self.ident, version)?;
-
-        decoded
-            .downcast::<T>()
-            .map_err(|_| Error::InvalidBspFormat { version })
+        format::decode(&mut self.reader, self.ident, version)
     }
 
     pub fn decode_gold_src_30(&mut self) -> Result<GoldSrc30Bsp> {
@@ -72,4 +67,6 @@ impl BspVersion {
     }
 }
 
-pub trait BspFormat: fmt::Debug {}
+pub enum BspFormat {
+    GoldSrc30(GoldSrc30Bsp),
+}
