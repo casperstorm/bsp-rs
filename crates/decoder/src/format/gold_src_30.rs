@@ -7,7 +7,7 @@ use std::mem::size_of;
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
-use crate::common::{read_array_f32, read_array_i32, read_uvec2_u16, read_vec3};
+use crate::common::{read_array_f32, read_array_i16, read_array_i32, read_uvec2_u16, read_vec3};
 use crate::{BspFormat, Error, Result};
 
 const NUM_LUMPS: usize = 16;
@@ -39,6 +39,7 @@ pub struct GoldSrc30Bsp {
     pub edges: Vec<Edge>,
     pub lighting: Vec<Lighting>,
     pub vertices: Vec<Vertex>,
+    pub nodes: Vec<Node>,
 }
 
 impl fmt::Debug for GoldSrc30Bsp {
@@ -49,6 +50,7 @@ impl fmt::Debug for GoldSrc30Bsp {
             .field("edges", &format!("{} edges", self.edges.len()))
             .field("lighting", &format!("{} lighting", self.lighting.len()))
             .field("vertices", &format!("{} verices", self.vertices.len()))
+            .field("nodes", &format!("{} nodes", self.nodes.len()))
             .finish()
     }
 }
@@ -62,8 +64,9 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
     let edges = decode_lump::<Edge, R>(reader, &header, LumpType::Edges)?;
     let lighting = decode_lump::<Lighting, R>(reader, &header, LumpType::Lighting)?;
     let vertices = decode_lump::<Vertex, R>(reader, &header, LumpType::Vertices)?;
+    let nodes = decode_lump::<Node, R>(reader, &header, LumpType::Nodes)?;
 
-    Ok(GoldSrc30Bsp { models, planes, edges,  lighting, vertices })
+    Ok(GoldSrc30Bsp { models, planes, edges,  lighting, vertices, nodes })
 }
 
 fn decode_header<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<Header> {
@@ -283,6 +286,35 @@ impl Lump for Vertex {
         )
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct Node {
+    pub idx_plane: u32,
+    pub idx_children: [i16; 2],
+    pub mins: [i16; 3],
+    pub maxs: [i16; 3],
+    pub first_face: u16,
+    pub num_faces: u16,
+}
+
+
+impl Lump for Node {
+    type Output = Node;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Node> {
+        Ok(
+            Node {
+                idx_plane: reader.read_u32::<LittleEndian>()?,
+                idx_children: read_array_i16(reader)?,
+                mins: read_array_i16(reader)?,
+                maxs: read_array_i16(reader)?,
+                first_face: reader.read_u16::<LittleEndian>()?,
+                num_faces: reader.read_u16::<LittleEndian>()?,
+            }
+        )
+    }
+}
+
 
 #[cfg(test)]
 mod test {
