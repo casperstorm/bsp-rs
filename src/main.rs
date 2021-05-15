@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 
 mod plugins;
 use plugins::ui::UiPlugin;
@@ -8,6 +9,7 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugin(UiPlugin)
         .add_startup_system(setup.system())
+        .add_plugin(FlyCameraPlugin)
         .run();
 }
 
@@ -22,6 +24,7 @@ fn setup(
         material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
         ..Default::default()
     });
+
     // cube
     commands.spawn_bundle(PbrBundle {
         mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
@@ -29,16 +32,19 @@ fn setup(
         transform: Transform::from_xyz(0.0, 0.5, 0.0),
         ..Default::default()
     });
+
     // light
     commands.spawn_bundle(LightBundle {
         transform: Transform::from_xyz(4.0, 8.0, 4.0),
         ..Default::default()
     });
-    // camera
-    commands.spawn_bundle(PerspectiveCameraBundle {
-        transform: Transform::from_xyz(-2.0, 2.5, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-        ..Default::default()
-    });
+
+    // https://github.com/mcpar-land/bevy_fly_camera
+    commands
+        .spawn()
+        .insert_bundle(PerspectiveCameraBundle::new_3d())
+        .insert(FlyCamera::default());
+
     // UI camera
     commands.spawn_bundle(UiCameraBundle::default());
 }

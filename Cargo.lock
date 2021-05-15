@@ -372,6 +372,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy_fly_camera"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f73c57d18a11c6135576fe34fa434640d2bc5a4c5ac4ea0eb0799bebc109b3a"
+dependencies = [
+ "bevy",
+]
+
+[[package]]
 name = "bevy_gilrs"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -795,6 +804,7 @@ name = "bsp-rs"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_fly_camera",
 ]
 
 [[package]]

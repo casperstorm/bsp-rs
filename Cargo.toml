@@ -13,4 +13,5 @@ members = [
 
 [dependencies]
 bevy = "0.5" 
+bevy_fly_camera = "0.7.0"
 
