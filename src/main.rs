@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
+use decoder::BspFormat;
 
 use crate::assets::{BspFile, BspFileLoader};
 use crate::plugins::ui::UiPlugin;
@@ -23,43 +24,17 @@ fn main() {
 #[derive(Default)]
 struct State {
     bsp_handle: Handle<BspFile>,
-    printed: bool,
+    loaded: bool,
 }
 
-fn setup(
-    mut state: ResMut<State>,
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    // plane
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Plane { size: 5.0 })),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        ..Default::default()
-    });
-
-    // cube
-    commands.spawn_bundle(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-        transform: Transform::from_xyz(0.0, 0.5, 0.0),
-        ..Default::default()
-    });
-
-    // light
-    commands.spawn_bundle(LightBundle {
-        transform: Transform::from_xyz(0.0, 8.0, 0.0),
-        ..Default::default()
-    });
-
+fn setup(mut state: ResMut<State>, mut commands: Commands, asset_server: Res<AssetServer>) {
+    // Load the inital map
     state.bsp_handle = asset_server.load("maps/de_dust.bsp");
 
     // https://github.com/mcpar-land/bevy_fly_camera
     commands
         .spawn_bundle(PerspectiveCameraBundle {
-            transform: Transform::from_xyz(0.0, 4.0, 10.0),
+            transform: Transform::from_xyz(1792.0, -104.0, -900.0),
             ..Default::default()
         })
         .insert(FlyCamera {
@@ -72,12 +47,47 @@ fn setup(
     commands.spawn_bundle(UiCameraBundle::default());
 }
 
-fn render_map(mut state: ResMut<State>, bsp_files: ResMut<Assets<BspFile>>) {
+#[allow(clippy::unnecessary_unwrap)]
+fn render_map(
+    mut state: ResMut<State>,
+    bsp_files: ResMut<Assets<BspFile>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut commands: Commands,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
     let bsp_file = bsp_files.get(&state.bsp_handle);
 
-    if bsp_file.is_some() && !state.printed {
-        info!("Map loaded: {:?}", bsp_file.unwrap());
+    if bsp_file.is_some() && !state.loaded {
+        let bsp_file = bsp_file.unwrap();
+        info!("Map loaded: {:?}", bsp_file);
 
-        state.printed = true;
+        state.loaded = true;
+
+        match &bsp_file.0 {
+            BspFormat::GoldSrc30(format) => {
+                // Debug volumes
+                for model in format.models[1..].iter() {
+                    let mesh = Mesh::from(shape::Box {
+                        max_z: model.maxs[0],
+                        max_x: model.maxs[1],
+                        max_y: model.maxs[2],
+                        min_z: model.mins[0],
+                        min_x: model.mins[1],
+                        min_y: model.mins[2],
+                    });
+
+                    let x = (model.maxs[1] + model.mins[1]) / 2.0;
+                    let y = (model.maxs[2] + model.mins[2]) / 2.0;
+                    let z = (model.maxs[0] + model.mins[0]) / 2.0;
+
+                    commands.spawn_bundle(PbrBundle {
+                        mesh: meshes.add(mesh),
+                        material: materials.add(Color::rgb(0.0, 0.66, 1.0).into()),
+                        transform: Transform::from_xyz(x, y, z),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
     }
 }
