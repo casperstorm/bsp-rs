@@ -12,6 +12,9 @@ members = [
 ]
 
 [dependencies]
+decoder = { path = "./crates/decoder" }
+
+anyhow = "1.0"
 bevy = "0.5" 
 bevy_fly_camera = "0.7.0"
 

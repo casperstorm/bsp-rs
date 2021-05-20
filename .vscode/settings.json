@@ -12,4 +12,7 @@
         "--message-format=json",
         "--all-targets"
     ],
+    "[toml]": {
+        "editor.formatOnSave": false,
+    }
 }

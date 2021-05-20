@@ -67,6 +67,7 @@ impl BspVersion {
     }
 }
 
+#[derive(Debug)]
 pub enum BspFormat {
     GoldSrc30(GoldSrc30Bsp),
 }
