@@ -6,7 +6,7 @@ use bevy::prelude::{shape, *};
 use bevy::reflect::TypeUuid;
 use bevy::render::mesh::Indices;
 use bevy::render::pipeline::PrimitiveTopology;
-use bevy::render::texture::{Extent3d, SamplerDescriptor};
+use bevy::render::texture::{AddressMode, Extent3d, SamplerDescriptor};
 use bevy::render::wireframe::Wireframe;
 use bevy::utils::BoxedFuture;
 use decoder::format::GoldSrc30Bsp;
@@ -157,7 +157,8 @@ fn load_gold_src_format(
                     depth: 1,
                 },
                 sampler: SamplerDescriptor {
-                    //mipmap_filter: FilterMode::Linear,
+                    address_mode_u: AddressMode::Repeat,
+                    address_mode_v: AddressMode::Repeat,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -202,154 +203,153 @@ fn load_gold_src_format(
         debug_volumes.push(debug_volume);
     }
 
-    let num_faces = model.num_faces as usize;
-    let first_face = model.idx_first_face as usize;
+    // Add faces
+    {
+        let num_faces = model.num_faces as usize;
+        let first_face = model.idx_first_face as usize;
 
-    for face_idx in first_face..first_face + num_faces {
-        let mut positions = vec![];
-        let mut normals = vec![];
-        //let mut tangents = vec![];
-        let mut colors = vec![];
-        let mut uvs = vec![];
-        let mut idx_miptex = None;
+        for face_idx in first_face..first_face + num_faces {
+            let mut positions = vec![];
+            let mut normals = vec![];
+            //let mut tangents = vec![];
+            let mut colors = vec![];
+            let mut uvs = vec![];
+            let mut idx_miptex = None;
 
-        if let Some(face) = bsp.faces.get(face_idx) {
-            let lighting = bsp.lighting.get(face.lightmap_offset as usize / 3);
+            if let Some(face) = bsp.faces.get(face_idx) {
+                let lighting = bsp.lighting.get(face.lightmap_offset as usize / 3);
 
-            let tex_info = bsp.texture_info.get(face.texture_info as usize);
-            idx_miptex = tex_info.map(|info| info.idx_miptex as usize);
-            let texture = tex_info
-                .map(|info| bsp.textures.get(info.idx_miptex as usize))
-                .flatten();
+                let tex_info = bsp.texture_info.get(face.texture_info as usize);
+                idx_miptex = tex_info.map(|info| info.idx_miptex as usize);
+                let texture = tex_info
+                    .map(|info| bsp.textures.get(info.idx_miptex as usize))
+                    .flatten();
 
-            if let Some(plane) = bsp.planes.get(face.plane as usize) {
-                let mut normal = plane.normal;
+                if let Some(plane) = bsp.planes.get(face.plane as usize) {
+                    let mut normal = plane.normal;
 
-                if face.plane_side > 0 {
-                    normal *= -1.0;
-                }
+                    if face.plane_side > 0 {
+                        normal *= -1.0;
+                    }
 
-                let num_edges = face.edges as usize;
-                let first_edge = face.first_edge as usize;
+                    let num_edges = face.edges as usize;
+                    let first_edge = face.first_edge as usize;
 
-                for surfedge_idx in first_edge..first_edge + num_edges {
-                    if let Some(surf_edge) = bsp.surf_edges.get(surfedge_idx) {
-                        let edge_idx = surf_edge.0;
-                        let edge_idx_abs = edge_idx.abs() as usize;
+                    for surfedge_idx in first_edge..first_edge + num_edges {
+                        if let Some(surf_edge) = bsp.surf_edges.get(surfedge_idx) {
+                            let edge_idx = surf_edge.0;
+                            let edge_idx_abs = edge_idx.abs() as usize;
 
-                        if let Some(edge) = bsp.edges.get(edge_idx_abs) {
-                            let mut vert0_idx = edge.vertex[0] as usize;
-                            let mut vert1_idx = edge.vertex[1] as usize;
+                            if let Some(edge) = bsp.edges.get(edge_idx_abs) {
+                                let mut vert0_idx = edge.vertex[0] as usize;
+                                let mut vert1_idx = edge.vertex[1] as usize;
 
-                            if edge_idx < 0 {
-                                std::mem::swap(&mut vert0_idx, &mut vert1_idx);
-                            }
-
-                            let vert0 = bsp.vertices.get(vert0_idx);
-                            let vert1 = bsp.vertices.get(vert1_idx);
-
-                            if let (Some(vert0), Some(vert1)) = (vert0, vert1) {
-                                // let mut tangent = glam::Vec3::default();
-                                // tangent.x = vert0.0.x - vert1.0.x;
-                                // tangent.y = vert0.0.y - vert1.0.y;
-                                // tangent.z = vert0.0.z - vert1.0.z;
-
-                                // let tangent_length = (tangent.x * tangent.x
-                                //     + tangent.y * tangent.y
-                                //     + tangent.z * tangent.z)
-                                //     .sqrt();
-
-                                // tangent.x /= tangent_length;
-                                // tangent.y /= tangent_length;
-                                // tangent.z /= tangent_length;
-
-                                let mut color = [0; 3];
-                                if let Some(colors) = lighting {
-                                    color[0] = colors.r as u32;
-                                    color[0] = colors.g as u32;
-                                    color[0] = colors.b as u32;
+                                if edge_idx < 0 {
+                                    std::mem::swap(&mut vert0_idx, &mut vert1_idx);
                                 }
 
-                                let mut u = 0.0;
-                                let mut v = 0.0;
-                                if let (Some(tex_info), Some(texture)) = (tex_info, texture) {
-                                    let s_vector = tex_info.s_vector;
-                                    let t_vector = tex_info.t_vector;
+                                let vert0 = bsp.vertices.get(vert0_idx);
+                                let vert1 = bsp.vertices.get(vert1_idx);
 
-                                    u = (vert0.0.dot(s_vector) + tex_info.s_shift)
-                                        / texture.width as f32;
+                                if let (Some(vert0), Some(vert1)) = (vert0, vert1) {
+                                    // let mut tangent = glam::Vec3::default();
+                                    // tangent.x = vert0.0.x - vert1.0.x;
+                                    // tangent.y = vert0.0.y - vert1.0.y;
+                                    // tangent.z = vert0.0.z - vert1.0.z;
 
-                                    v = (vert0.0.dot(t_vector) + tex_info.t_shift)
-                                        / texture.height as f32;
+                                    // let tangent_length = (tangent.x * tangent.x
+                                    //     + tangent.y * tangent.y
+                                    //     + tangent.z * tangent.z)
+                                    //     .sqrt();
+
+                                    // tangent.x /= tangent_length;
+                                    // tangent.y /= tangent_length;
+                                    // tangent.z /= tangent_length;
+
+                                    let mut color = [0; 3];
+                                    if let Some(colors) = lighting {
+                                        color[0] = colors.r as u32;
+                                        color[0] = colors.g as u32;
+                                        color[0] = colors.b as u32;
+                                    }
+
+                                    let mut u = 0.0;
+                                    let mut v = 0.0;
+                                    if let (Some(tex_info), Some(texture)) = (tex_info, texture) {
+                                        let s_vector = tex_info.s_vector;
+                                        let t_vector = tex_info.t_vector;
+
+                                        u = (vert0.0.dot(s_vector) + tex_info.s_shift)
+                                            / texture.width as f32;
+
+                                        v = (vert0.0.dot(t_vector) + tex_info.t_shift)
+                                            / texture.height as f32;
+                                    }
+
+                                    positions.push(vert0.0);
+                                    //tangents.push(tangent);
+                                    normals.push(normal);
+                                    colors.push(color);
+                                    uvs.push([u, v]);
                                 }
-
-                                positions.push(vert0.0);
-                                //tangents.push(tangent);
-                                normals.push(normal);
-                                colors.push(color);
-                                uvs.push([u, v]);
+                            } else {
+                                println!(
+                                    "Can't find edge {} from surfedge {}",
+                                    surf_edge.0.abs(),
+                                    surfedge_idx
+                                );
                             }
                         } else {
-                            println!(
-                                "Can't find edge {} from surfedge {}",
-                                surf_edge.0.abs(),
-                                surfedge_idx
-                            );
+                            println!("Can't find surfedge {}", surfedge_idx);
                         }
-                    } else {
-                        println!("Can't find surfedge {}", surfedge_idx);
                     }
+                } else {
+                    println!("Can't find plane {}", face.plane);
                 }
             } else {
-                println!("Can't find plane {}", face.plane);
+                println!("Can't find face {}", face_idx);
             }
-        } else {
-            println!("Can't find face {}", face_idx);
+
+            let indicies = triangulate(&positions);
+
+            let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+            mesh.set_attribute(
+                Mesh::ATTRIBUTE_UV_0,
+                uvs.into_iter().rev().collect::<Vec<_>>(),
+            );
+            mesh.set_attribute(
+                Mesh::ATTRIBUTE_POSITION,
+                positions
+                    .into_iter()
+                    .rev()
+                    .map(vec3tofloat3)
+                    .collect::<Vec<_>>(),
+            );
+            mesh.set_attribute(
+                Mesh::ATTRIBUTE_NORMAL,
+                normals.into_iter().map(vec3tofloat3).collect::<Vec<_>>(),
+            );
+            // mesh.set_attribute(
+            //     Mesh::ATTRIBUTE_TANGENT,
+            //     tangents
+            //         .into_iter()
+            //         .rev()
+            //         .map(vec3tofloat3)
+            //         .collect::<Vec<_>>(),
+            // );
+            mesh.set_attribute(
+                Mesh::ATTRIBUTE_COLOR,
+                colors.into_iter().collect::<Vec<_>>(),
+            );
+            mesh.set_indices(Some(Indices::U16(indicies)));
+
+            let mesh_label = format!("Mesh{}", face_idx);
+            let mesh = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(mesh));
+
+            let face = BspFace { mesh, idx_miptex };
+
+            faces.push(face);
         }
-
-        let indicies = triangulate(&positions);
-
-        let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-        mesh.set_attribute(
-            Mesh::ATTRIBUTE_UV_0,
-            uvs.into_iter().rev().collect::<Vec<_>>(),
-        );
-        mesh.set_attribute(
-            Mesh::ATTRIBUTE_POSITION,
-            positions
-                .into_iter()
-                .rev()
-                .map(vec3tofloat3)
-                .collect::<Vec<_>>(),
-        );
-        mesh.set_attribute(
-            Mesh::ATTRIBUTE_NORMAL,
-            normals
-                .into_iter()
-                .rev()
-                .map(vec3tofloat3)
-                .collect::<Vec<_>>(),
-        );
-        // mesh.set_attribute(
-        //     Mesh::ATTRIBUTE_TANGENT,
-        //     tangents
-        //         .into_iter()
-        //         .rev()
-        //         .map(vec3tofloat3)
-        //         .collect::<Vec<_>>(),
-        // );
-        mesh.set_attribute(
-            Mesh::ATTRIBUTE_COLOR,
-            colors.into_iter().rev().collect::<Vec<_>>(),
-        );
-        mesh.set_indices(Some(Indices::U16(indicies)));
-
-        let mesh_label = format!("Mesh{}", face_idx);
-        let mesh = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(mesh));
-
-        let face = BspFace { mesh, idx_miptex };
-
-        faces.push(face);
     }
 
     let mut world = World::default();
