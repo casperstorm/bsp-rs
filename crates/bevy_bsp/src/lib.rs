@@ -2,7 +2,7 @@ use std::io::Cursor;
 
 use anyhow::format_err;
 use bevy::asset::{AssetLoader, LoadContext, LoadedAsset};
-use bevy::prelude::*;
+use bevy::prelude::{shape, *};
 use bevy::reflect::TypeUuid;
 use bevy::render::mesh::Indices;
 use bevy::render::pipeline::PrimitiveTopology;
@@ -18,7 +18,7 @@ pub struct BspConfig {
 
 #[derive(Debug, Clone, Reflect, Default)]
 #[reflect(Component)]
-pub struct BspFace;
+pub struct BspMesh;
 
 /// Adds support for Bsp file rendering
 #[derive(Default)]
@@ -28,7 +28,7 @@ impl Plugin for BspPlugin {
     fn build(&self, app: &mut AppBuilder) {
         app.init_asset_loader::<BspFileLoader>()
             .init_resource::<BspConfig>()
-            .register_type::<BspFace>()
+            .register_type::<BspMesh>()
             .register_type::<Wireframe>()
             .add_asset::<BspFile>()
             .add_system(add_wireframes_system.system());
@@ -40,6 +40,7 @@ impl Plugin for BspPlugin {
 pub struct BspFile {
     meshes: Vec<Handle<Mesh>>,
     scene: Handle<Scene>,
+    debug_volumes: Vec<Handle<Mesh>>,
 }
 
 #[derive(Default)]
@@ -88,6 +89,23 @@ fn load_gold_src_format(
     let first_face = model.idx_first_face as usize;
 
     let mut meshes = vec![];
+    let mut debug_volumes = vec![];
+
+    // Add debug volume for worldspawn
+    {
+        let mins = model.mins;
+        let maxs = model.maxs;
+
+        let x_length = maxs[0] - mins[0];
+        let y_length = maxs[1] - mins[1];
+        let z_length = maxs[2] - mins[2];
+        let worldspawn_box: Mesh = shape::Box::new(x_length, y_length, z_length).into();
+
+        let mesh_label = "WorldspawnDebugMesh";
+        let handle = load_context.set_labeled_asset(mesh_label, LoadedAsset::new(worldspawn_box));
+
+        debug_volumes.push(handle);
+    }
 
     for face_idx in first_face..first_face + num_faces {
         let mut positions = vec![];
@@ -222,14 +240,41 @@ fn load_gold_src_format(
                             material: material.clone(),
                             ..Default::default()
                         })
-                        .insert(BspFace);
+                        .insert(BspMesh);
+                }
+
+                let material: StandardMaterial = Color::BLACK.into();
+                let material =
+                    load_context.set_labeled_asset("DebugVolumeColor", LoadedAsset::new(material));
+
+                for mesh in debug_volumes.clone() {
+                    //Fix: Add bounding boxes to actual asset handle incase we want to use more than worldspawn in future
+
+                    let mins = model.mins;
+                    let maxs = model.maxs;
+                    let x = (mins[0] + maxs[0]) / 2.0;
+                    let y = (mins[1] + maxs[1]) / 2.0;
+                    let z = (mins[2] + maxs[2]) / 2.0;
+
+                    parent
+                        .spawn_bundle(PbrBundle {
+                            mesh,
+                            material: material.clone(),
+                            transform: Transform::from_xyz(x, y, z),
+                            ..Default::default()
+                        })
+                        .insert(BspMesh);
                 }
             });
         });
 
     let scene = load_context.set_labeled_asset("Map", LoadedAsset::new(Scene::new(world)));
 
-    load_context.set_default_asset(LoadedAsset::new(BspFile { meshes, scene }));
+    load_context.set_default_asset(LoadedAsset::new(BspFile {
+        meshes,
+        scene,
+        debug_volumes,
+    }));
 
     Ok(())
 }
@@ -259,8 +304,8 @@ fn add_wireframes_system(
     mut commands: Commands,
     config: Res<BspConfig>,
     mut query: QuerySet<(
-        Query<(Entity, &BspFace), Without<Wireframe>>,
-        Query<(Entity, &BspFace), With<Wireframe>>,
+        Query<(Entity, &BspMesh), Without<Wireframe>>,
+        Query<(Entity, &BspMesh), With<Wireframe>>,
     )>,
 ) {
     if config.show_wireframe {
