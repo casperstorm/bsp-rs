@@ -20,6 +20,7 @@ fn main() {
             },
             ..Default::default()
         })
+        .insert_resource(Msaa { samples: 4 })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
             brightness: 2.5 / 5.0f32,
@@ -41,7 +42,7 @@ fn setup(
     // To draw the wireframe on all entities, set this to 'true'
     wireframe_config.global = false;
 
-    commands.spawn_scene(asset_server.load("maps/de_dust2.bsp#Map"));
+    commands.spawn_scene(asset_server.load("maps/de_inferno.bsp#Map"));
 
     let perspective_projection = PerspectiveProjection {
         fov: 90.0,

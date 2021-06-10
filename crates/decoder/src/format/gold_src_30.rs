@@ -147,7 +147,7 @@ fn decode_textures<R: Read + Seek>(reader: &mut R, header: &Header) -> Result<Ve
     for offset in offsets {
         reader.seek(SeekFrom::Start((lump.file_offset as usize + offset) as u64))?;
 
-        let texture = Texture::decode(reader)?;
+        let texture = Texture::decode(reader, lump.file_offset as usize + offset)?;
 
         textures.push(texture);
     }
@@ -481,23 +481,61 @@ impl Lump for Face {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Texture {
     pub name: [u8; MAXTEXTURENAME],
     pub width: u32,
     pub height: u32,
     pub offsets: [u32; MIPLEVELS],
+    pub mip: Vec<u8>,
+    pub palette: [[u8; 3]; 256],
 }
 
-impl Lump for Texture {
-    type Output = Texture;
+impl Texture {
+    fn decode<R: Read + Seek>(reader: &mut R, offset: usize) -> Result<Texture> {
+        let name = read_array_u8(reader)?;
+        let width = reader.read_u32::<LittleEndian>()?;
+        let height = reader.read_u32::<LittleEndian>()?;
+        let offsets = read_array_u32(reader)?;
 
-    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Texture> {
+        let pallete_offset = offset + offsets[3] as usize + ((width * height) / 64) as usize + 2;
+        reader.seek(SeekFrom::Start(pallete_offset as u64))?;
+
+        let mut palette = [[0; 3]; 256];
+
+        for array in palette.iter_mut() {
+            let r = reader.read_u8();
+            let g = reader.read_u8();
+            let b = reader.read_u8();
+
+            *array = [
+                r.unwrap_or_default(),
+                g.unwrap_or_default(),
+                b.unwrap_or_default(),
+            ];
+        }
+
+        let mut mip = vec![];
+        if offsets[0] > 0 {
+            let mip_offset = offset + offsets[0] as usize;
+            let mip_len = (width * height) as usize;
+
+            mip = vec![0; mip_len];
+
+            reader.seek(SeekFrom::Start(mip_offset as u64))?;
+
+            for i in mip.iter_mut() {
+                *i = reader.read_u8().unwrap_or_default();
+            }
+        }
+
         Ok(Texture {
-            name: read_array_u8(reader)?,
-            width: reader.read_u32::<LittleEndian>()?,
-            height: reader.read_u32::<LittleEndian>()?,
-            offsets: read_array_u32(reader)?,
+            name,
+            width,
+            height,
+            offsets,
+            palette,
+            mip,
         })
     }
 }
