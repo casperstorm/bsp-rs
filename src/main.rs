@@ -22,7 +22,7 @@ fn main() {
         })
         .insert_resource(AmbientLight {
             color: Color::WHITE,
-            brightness: 1.0 / 5.0f32,
+            brightness: 2.5 / 5.0f32,
         })
         .add_plugins(DefaultPlugins)
         .add_plugin(WireframePlugin)
