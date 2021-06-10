@@ -211,7 +211,6 @@ fn load_gold_src_format(
         for face_idx in first_face..first_face + num_faces {
             let mut positions = vec![];
             let mut normals = vec![];
-            //let mut tangents = vec![];
             let mut colors = vec![];
             let mut uvs = vec![];
             let mut idx_miptex = None;
@@ -249,23 +248,8 @@ fn load_gold_src_format(
                                 }
 
                                 let vert0 = bsp.vertices.get(vert0_idx);
-                                let vert1 = bsp.vertices.get(vert1_idx);
 
-                                if let (Some(vert0), Some(vert1)) = (vert0, vert1) {
-                                    // let mut tangent = glam::Vec3::default();
-                                    // tangent.x = vert0.0.x - vert1.0.x;
-                                    // tangent.y = vert0.0.y - vert1.0.y;
-                                    // tangent.z = vert0.0.z - vert1.0.z;
-
-                                    // let tangent_length = (tangent.x * tangent.x
-                                    //     + tangent.y * tangent.y
-                                    //     + tangent.z * tangent.z)
-                                    //     .sqrt();
-
-                                    // tangent.x /= tangent_length;
-                                    // tangent.y /= tangent_length;
-                                    // tangent.z /= tangent_length;
-
+                                if let Some(vert0) = vert0 {
                                     let mut color = [0; 3];
                                     if let Some(colors) = lighting {
                                         color[0] = colors.r as u32;
@@ -329,14 +313,6 @@ fn load_gold_src_format(
                 Mesh::ATTRIBUTE_NORMAL,
                 normals.into_iter().map(vec3tofloat3).collect::<Vec<_>>(),
             );
-            // mesh.set_attribute(
-            //     Mesh::ATTRIBUTE_TANGENT,
-            //     tangents
-            //         .into_iter()
-            //         .rev()
-            //         .map(vec3tofloat3)
-            //         .collect::<Vec<_>>(),
-            // );
             mesh.set_attribute(
                 Mesh::ATTRIBUTE_COLOR,
                 colors.into_iter().collect::<Vec<_>>(),
