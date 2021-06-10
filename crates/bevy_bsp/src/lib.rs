@@ -1,5 +1,4 @@
 use std::io::Cursor;
-use std::ops::MulAssign;
 
 use anyhow::format_err;
 use bevy::asset::{AssetLoader, LoadContext, LoadedAsset};
@@ -7,7 +6,7 @@ use bevy::prelude::{shape, *};
 use bevy::reflect::TypeUuid;
 use bevy::render::mesh::Indices;
 use bevy::render::pipeline::PrimitiveTopology;
-use bevy::render::texture::{Extent3d, FilterMode, SamplerDescriptor, TextureFormat};
+use bevy::render::texture::{Extent3d, SamplerDescriptor};
 use bevy::render::wireframe::Wireframe;
 use bevy::utils::BoxedFuture;
 use decoder::format::GoldSrc30Bsp;
@@ -39,12 +38,7 @@ impl Plugin for BspPlugin {
 
 #[derive(Debug, TypeUuid)]
 #[uuid = "39cadc56-aa9c-4543-8640-a018b74b5052"]
-pub struct BspFile {
-    materials: Vec<Handle<StandardMaterial>>,
-    meshes: Vec<Handle<Mesh>>,
-    scene: Handle<Scene>,
-    debug_volumes: Vec<Handle<Mesh>>,
-}
+pub struct BspFile;
 
 #[derive(Default)]
 pub struct BspFileLoader;
@@ -79,6 +73,22 @@ fn load_format(format: BspFormat, load_context: &mut LoadContext) -> Result<(), 
     Ok(())
 }
 
+struct BspFace {
+    mesh: Handle<Mesh>,
+    idx_miptex: Option<usize>,
+}
+
+struct BspDebugVolume {
+    mesh: Handle<Mesh>,
+    mins: [f32; 3],
+    maxs: [f32; 3],
+}
+
+struct BspTexture {
+    material: Handle<StandardMaterial>,
+    is_transparent: bool,
+}
+
 fn load_gold_src_format(
     bsp: GoldSrc30Bsp,
     load_context: &mut LoadContext,
@@ -109,229 +119,87 @@ fn load_gold_src_format(
         parse(back);
     }
 
-    let mut materials = vec![];
-    let mut meshes = vec![];
+    let mut textures = vec![];
+    let mut faces = vec![];
     let mut debug_volumes = vec![];
 
-    // for idx in leaves {
-    //     let leaf = bsp.leaves[idx as usize];
+    // Add textures
+    for (idx, texture) in bsp.textures.iter().enumerate() {
+        // Skip WAD textures
+        if texture.offsets[0] > 0 {
+            let mut transparent = false;
+            let mut data = vec![];
 
-    //     for offset in 0..leaf.num_mark_surfaces {
-    //         let mut positions = vec![];
-    //         let mut normals = vec![];
-    //         let mut tangents = vec![];
-    //         let mut colors = vec![];
-    //         let mut uvs = vec![];
-    //         let mut texture = None;
+            let is_tranparent = |r: u8, g: u8, b: u8| -> bool { r == 0 && g == 0 && b == 255 };
 
-    //         let face_idx =
-    //             bsp.mark_surfaces[leaf.idx_first_mark_surface as usize + offset as usize].0;
+            for idx in texture.mip.iter() {
+                let idx = *idx as usize;
 
-    //         if let Some(face) = bsp.faces.get(face_idx as usize) {
-    //             let lighting = bsp.lighting.get(face.lightmap_offset as usize / 3);
+                let r = texture.palette[idx.min(255)][0];
+                let g = texture.palette[idx.min(255)][1];
+                let b = texture.palette[idx.min(255)][2];
 
-    //             // TODO: Get texture
-    //             let tex_info = bsp.texture_info.get(face.texture_info as usize);
-    //             texture = tex_info
-    //                 .map(|info| bsp.textures.get(info.idx_miptex as usize))
-    //                 .flatten();
-    //             //let tex_name = texture.map(|t| String::from_utf8_lossy(&t.name[..]).to_string());
+                data.push(r);
+                data.push(g);
+                data.push(b);
+                data.push(if is_tranparent(r, g, b) { 0 } else { 255 });
 
-    //             // if tex_name
-    //             //     .as_deref()
-    //             //     .map(|name| name.starts_with("sky"))
-    //             //     .unwrap_or_default()
-    //             // {
-    //             //     continue;
-    //             // }
+                if is_tranparent(r, g, b) {
+                    transparent = true;
+                }
+            }
 
-    //             if let Some(plane) = bsp.planes.get(face.plane as usize) {
-    //                 let mut normal = plane.normal;
+            let texture = Texture {
+                data,
+                size: Extent3d {
+                    width: texture.width,
+                    height: texture.height,
+                    depth: 1,
+                },
+                sampler: SamplerDescriptor {
+                    //mipmap_filter: FilterMode::Linear,
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            let tex_handle = load_context
+                .set_labeled_asset(&format!("Texture{}", idx), LoadedAsset::new(texture));
 
-    //                 if face.plane_side > 0 {
-    //                     normal.x *= -1.0;
-    //                     normal.y *= -1.0;
-    //                     normal.z *= -1.0;
-    //                 }
+            let material = StandardMaterial {
+                base_color_texture: Some(tex_handle),
+                unlit: true,
+                ..Default::default()
+            };
+            let mat_handle = load_context.set_labeled_asset(
+                &format!("TextureMaterial{}", idx),
+                LoadedAsset::new(material),
+            );
 
-    //                 let num_edges = face.edges as usize;
-    //                 let first_edge = face.first_edge as usize;
+            let texture = BspTexture {
+                material: mat_handle,
+                is_transparent: transparent,
+            };
 
-    //                 for surfedge_idx in first_edge..first_edge + num_edges {
-    //                     if let Some(surf_edge) = bsp.surf_edges.get(surfedge_idx) {
-    //                         let edge_idx = surf_edge.0;
-    //                         let edge_idx_abs = edge_idx.abs() as usize;
+            textures.push(texture);
+        }
+    }
 
-    //                         if let Some(edge) = bsp.edges.get(edge_idx_abs) {
-    //                             let mut vert0_idx = edge.vertex.x as usize;
-    //                             let mut vert1_idx = edge.vertex.y as usize;
-
-    //                             if edge_idx < 0 {
-    //                                 std::mem::swap(&mut vert0_idx, &mut vert1_idx);
-    //                             }
-
-    //                             let vert0 = bsp.vertices.get(vert0_idx);
-    //                             let vert1 = bsp.vertices.get(vert1_idx);
-
-    //                             if let (Some(vert0), Some(vert1)) = (vert0, vert1) {
-    //                                 let mut tangent = glam::Vec3::default();
-    //                                 tangent.x = vert0.0.x - vert1.0.x;
-    //                                 tangent.y = vert0.0.y - vert1.0.y;
-    //                                 tangent.z = vert0.0.z - vert1.0.z;
-
-    //                                 let tangent_length = (tangent.x * tangent.x
-    //                                     + tangent.y * tangent.y
-    //                                     + tangent.z * tangent.z)
-    //                                     .sqrt();
-
-    //                                 tangent.x /= tangent_length;
-    //                                 tangent.y /= tangent_length;
-    //                                 tangent.z /= tangent_length;
-
-    //                                 let mut color = [0; 3];
-    //                                 if let Some(colors) = lighting {
-    //                                     color[0] = colors.r as u32;
-    //                                     color[0] = colors.g as u32;
-    //                                     color[0] = colors.b as u32;
-    //                                 }
-
-    //                                 let mut u = 0.0;
-    //                                 let mut v = 0.0;
-    //                                 if let Some(tex_info) = tex_info {
-    //                                     u = (tex_info.s_vector.x * vert0.0.x
-    //                                         + tex_info.s_vector.y * vert0.0.y
-    //                                         + tex_info.s_vector.z * vert0.0.z)
-    //                                         + tex_info.s_shift;
-
-    //                                     v = (tex_info.t_vector.x * vert0.0.x
-    //                                         + tex_info.t_vector.y * vert0.0.y
-    //                                         + tex_info.t_vector.z * vert0.0.z)
-    //                                         + tex_info.t_shift;
-    //                                 }
-
-    //                                 positions.push(vert0.0);
-    //                                 tangents.push(tangent);
-    //                                 normals.push(normal);
-    //                                 colors.push(color);
-    //                                 uvs.push([u, v]);
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         let indicies = triangulate(&positions);
-
-    //         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-    //         mesh.set_attribute(
-    //             Mesh::ATTRIBUTE_UV_0,
-    //             uvs.into_iter().rev().collect::<Vec<_>>(),
-    //         );
-    //         mesh.set_attribute(
-    //             Mesh::ATTRIBUTE_POSITION,
-    //             positions
-    //                 .into_iter()
-    //                 .rev()
-    //                 .map(vec3tofloat3)
-    //                 .collect::<Vec<_>>(),
-    //         );
-    //         mesh.set_attribute(
-    //             Mesh::ATTRIBUTE_NORMAL,
-    //             normals
-    //                 .into_iter()
-    //                 .rev()
-    //                 .map(vec3tofloat3)
-    //                 .collect::<Vec<_>>(),
-    //         );
-    //         mesh.set_attribute(
-    //             Mesh::ATTRIBUTE_TANGENT,
-    //             tangents
-    //                 .into_iter()
-    //                 .rev()
-    //                 .map(vec3tofloat3)
-    //                 .collect::<Vec<_>>(),
-    //         );
-    //         mesh.set_attribute(
-    //             Mesh::ATTRIBUTE_COLOR,
-    //             colors.into_iter().rev().collect::<Vec<_>>(),
-    //         );
-    //         mesh.set_indices(Some(Indices::U16(indicies)));
-
-    //         let mesh_label = format!("Mesh{}", face_idx);
-    //         let handle = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(mesh));
-
-    //         meshes.push(handle);
-
-    //         if let Some(texture) = texture {
-    //             // Skip WAD textures
-    //             if texture.offsets[0] > 0 {
-    //                 let mut transparent = false;
-    //                 let mut data = vec![];
-
-    //                 let is_tranparent =
-    //                     |r: u8, g: u8, b: u8| -> bool { r == 0 && g == 0 && b == 255 };
-
-    //                 for idx in texture.mip.iter() {
-    //                     let idx = *idx as usize;
-
-    //                     let r = texture.palette[idx.min(255)][0];
-    //                     let g = texture.palette[idx.min(255)][1];
-    //                     let b = texture.palette[idx.min(255)][2];
-
-    //                     data.push(r);
-    //                     data.push(g);
-    //                     data.push(b);
-    //                     data.push(if is_tranparent(r, g, b) { 0 } else { 255 });
-
-    //                     if is_tranparent(r, g, b) {
-    //                         transparent = true;
-    //                     }
-    //                 }
-
-    //                 let texture = Texture {
-    //                     data,
-    //                     size: Extent3d {
-    //                         width: texture.width,
-    //                         height: texture.height,
-    //                         depth: 1,
-    //                     },
-    //                     ..Default::default()
-    //                 };
-    //                 let tex_handle = load_context.set_labeled_asset(
-    //                     &format!("Texture{}", face_idx),
-    //                     LoadedAsset::new(texture),
-    //                 );
-
-    //                 let material = StandardMaterial {
-    //                     base_color_texture: Some(tex_handle),
-    //                     unlit: true,
-    //                     ..Default::default()
-    //                 };
-    //                 let mat_handle = load_context.set_labeled_asset(
-    //                     &format!("Material{}", face_idx),
-    //                     LoadedAsset::new(material),
-    //                 );
-
-    //                 materials.push(mat_handle);
-    //             }
-    //         }
-    //     }
-    // }
-
-    // Add debug volume for worldspawn
-    {
+    // Add debug volumes
+    for (idx, model) in bsp.models.iter().enumerate() {
         let mins = model.mins;
         let maxs = model.maxs;
 
         let x_length = maxs[1] - mins[1];
         let y_length = maxs[2] - mins[2];
         let z_length = maxs[0] - mins[0];
-        let worldspawn_box: Mesh = shape::Box::new(x_length, y_length, z_length).into();
+        let volume: Mesh = shape::Box::new(x_length, y_length, z_length).into();
 
-        let mesh_label = "WorldspawnDebugMesh";
-        let handle = load_context.set_labeled_asset(mesh_label, LoadedAsset::new(worldspawn_box));
+        let mesh_label = format!("DebugVolumeMesh{}", idx);
+        let mesh = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(volume));
 
-        debug_volumes.push(handle);
+        let debug_volume = BspDebugVolume { mesh, mins, maxs };
+
+        debug_volumes.push(debug_volume);
     }
 
     let num_faces = model.num_faces as usize;
@@ -343,25 +211,16 @@ fn load_gold_src_format(
         //let mut tangents = vec![];
         let mut colors = vec![];
         let mut uvs = vec![];
-        let mut texture = None;
+        let mut idx_miptex = None;
 
         if let Some(face) = bsp.faces.get(face_idx) {
             let lighting = bsp.lighting.get(face.lightmap_offset as usize / 3);
 
-            // TODO: Get texture
             let tex_info = bsp.texture_info.get(face.texture_info as usize);
-            texture = tex_info
+            idx_miptex = tex_info.map(|info| info.idx_miptex as usize);
+            let texture = tex_info
                 .map(|info| bsp.textures.get(info.idx_miptex as usize))
                 .flatten();
-            //let tex_name = texture.map(|t| String::from_utf8_lossy(&t.name[..]).to_string());
-
-            // if tex_name
-            //     .as_deref()
-            //     .map(|name| name.starts_with("sky"))
-            //     .unwrap_or_default()
-            // {
-            //     continue;
-            // }
 
             if let Some(plane) = bsp.planes.get(face.plane as usize) {
                 let mut normal = plane.normal;
@@ -414,10 +273,13 @@ fn load_gold_src_format(
                                 let mut u = 0.0;
                                 let mut v = 0.0;
                                 if let (Some(tex_info), Some(texture)) = (tex_info, texture) {
-                                    u = (vert0.0.dot(tex_info.s_vector) + tex_info.s_shift)
+                                    let s_vector = tex_info.s_vector;
+                                    let t_vector = tex_info.t_vector;
+
+                                    u = (vert0.0.dot(s_vector) + tex_info.s_shift)
                                         / texture.width as f32;
 
-                                    v = (vert0.0.dot(tex_info.t_vector) + tex_info.t_shift)
+                                    v = (vert0.0.dot(t_vector) + tex_info.t_shift)
                                         / texture.height as f32;
                                 }
 
@@ -483,64 +345,11 @@ fn load_gold_src_format(
         mesh.set_indices(Some(Indices::U16(indicies)));
 
         let mesh_label = format!("Mesh{}", face_idx);
-        let handle = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(mesh));
+        let mesh = load_context.set_labeled_asset(&mesh_label, LoadedAsset::new(mesh));
 
-        meshes.push(handle);
+        let face = BspFace { mesh, idx_miptex };
 
-        // if let Some(texture) = texture {
-        //     // Skip WAD textures
-        //     if texture.offsets[0] > 0 {
-        //         let mut transparent = false;
-        //         let mut data = vec![];
-
-        //         let is_tranparent = |r: u8, g: u8, b: u8| -> bool { r == 0 && g == 0 && b == 255 };
-
-        //         for idx in texture.mip.iter() {
-        //             let idx = *idx as usize;
-
-        //             let r = texture.palette[idx.min(255)][0];
-        //             let g = texture.palette[idx.min(255)][1];
-        //             let b = texture.palette[idx.min(255)][2];
-
-        //             data.push(r);
-        //             data.push(g);
-        //             data.push(b);
-        //             data.push(if is_tranparent(r, g, b) { 0 } else { 255 });
-
-        //             if is_tranparent(r, g, b) {
-        //                 transparent = true;
-        //             }
-        //         }
-
-        //         let texture = Texture {
-        //             data,
-        //             size: Extent3d {
-        //                 width: texture.width,
-        //                 height: texture.height,
-        //                 depth: 1,
-        //             },
-        //             sampler: SamplerDescriptor {
-        //                 //mipmap_filter: FilterMode::Linear,
-        //                 ..Default::default()
-        //             },
-        //             ..Default::default()
-        //         };
-        //         let tex_handle = load_context
-        //             .set_labeled_asset(&format!("Texture{}", face_idx), LoadedAsset::new(texture));
-
-        //         let material = StandardMaterial {
-        //             base_color_texture: Some(tex_handle),
-        //             unlit: true,
-        //             ..Default::default()
-        //         };
-        //         let mat_handle = load_context.set_labeled_asset(
-        //             &format!("Material{}", face_idx),
-        //             LoadedAsset::new(material),
-        //         );
-
-        //         materials.push(mat_handle);
-        //     }
-        // }
+        faces.push(face);
     }
 
     let mut world = World::default();
@@ -551,71 +360,76 @@ fn load_gold_src_format(
             let mut map = parent.spawn_bundle((Transform::identity(), GlobalTransform::identity()));
 
             map.with_children(|parent| {
-                let material: StandardMaterial = Color::DARK_GRAY.into();
-                let default_material =
-                    load_context.set_labeled_asset("DebugColor", LoadedAsset::new(material));
+                // Spawn faces
+                {
+                    let material: StandardMaterial = Color::DARK_GRAY.into();
+                    let default_material =
+                        load_context.set_labeled_asset("FaceColor", LoadedAsset::new(material));
 
-                for (idx, mesh) in meshes.clone().into_iter().enumerate() {
-                    let material = materials.get(idx).cloned();
+                    for face in faces.into_iter() {
+                        let texture = face.idx_miptex.map(|idx| textures.get(idx)).flatten();
 
-                    parent
-                        .spawn_bundle(PbrBundle {
-                            mesh,
-                            material: material.unwrap_or_else(|| default_material.clone()),
-                            visible: Visible {
-                                is_transparent: true,
+                        parent
+                            .spawn_bundle(PbrBundle {
+                                mesh: face.mesh,
+                                material: texture
+                                    .map(|t| t.material.clone())
+                                    .unwrap_or_else(|| default_material.clone()),
+                                visible: Visible {
+                                    is_transparent: texture
+                                        .map(|t| t.is_transparent)
+                                        .unwrap_or_default(),
+                                    ..Default::default()
+                                },
                                 ..Default::default()
-                            },
-                            ..Default::default()
-                        })
-                        .insert(BspMesh);
+                            })
+                            .insert(BspMesh);
+                    }
                 }
 
-                let material = StandardMaterial {
-                    base_color: Color::Rgba {
-                        red: 0.0,
-                        green: 0.0,
-                        blue: 0.0,
-                        alpha: 0.0,
-                    },
-                    ..Default::default()
-                };
-                let material =
-                    load_context.set_labeled_asset("DebugVolumeColor", LoadedAsset::new(material));
+                // Spawn debug volumes
+                {
+                    let material = StandardMaterial {
+                        base_color: Color::Rgba {
+                            red: 0.0,
+                            green: 0.0,
+                            blue: 0.0,
+                            alpha: 0.0,
+                        },
+                        ..Default::default()
+                    };
+                    let material = load_context
+                        .set_labeled_asset("DebugVolumeColor", LoadedAsset::new(material));
 
-                for mesh in debug_volumes.clone() {
-                    //Fix: Add bounding boxes to actual asset handle incase we want to use more than worldspawn in future
+                    for debug_volumes in debug_volumes.into_iter() {
+                        //Fix: Add bounding boxes to actual asset handle incase we want to use more than worldspawn in future
 
-                    let mins = model.mins;
-                    let maxs = model.maxs;
-                    let x = (mins[1] + maxs[1]) / 2.0;
-                    let y = (mins[2] + maxs[2]) / 2.0;
-                    let z = (mins[0] + maxs[0]) / 2.0;
+                        let mins = debug_volumes.mins;
+                        let maxs = debug_volumes.maxs;
+                        let x = (mins[1] + maxs[1]) / 2.0;
+                        let y = (mins[2] + maxs[2]) / 2.0;
+                        let z = (mins[0] + maxs[0]) / 2.0;
 
-                    parent
-                        .spawn_bundle(PbrBundle {
-                            mesh,
-                            material: material.clone(),
-                            transform: Transform::from_xyz(x, y, z),
-                            visible: Visible {
-                                is_transparent: true,
+                        parent
+                            .spawn_bundle(PbrBundle {
+                                mesh: debug_volumes.mesh,
+                                material: material.clone(),
+                                transform: Transform::from_xyz(x, y, z),
+                                visible: Visible {
+                                    is_transparent: true,
+                                    ..Default::default()
+                                },
                                 ..Default::default()
-                            },
-                            ..Default::default()
-                        })
-                        .insert(BspMesh);
+                            })
+                            .insert(BspMesh);
+                    }
                 }
             });
         });
 
-    let scene = load_context.set_labeled_asset("Map", LoadedAsset::new(Scene::new(world)));
+    load_context.set_labeled_asset("Map", LoadedAsset::new(Scene::new(world)));
 
-    load_context.set_default_asset(LoadedAsset::new(BspFile {
-        materials,
-        meshes,
-        scene,
-        debug_volumes,
-    }));
+    load_context.set_default_asset(LoadedAsset::new(BspFile));
 
     Ok(())
 }

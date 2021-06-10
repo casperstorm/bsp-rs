@@ -35,7 +35,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let bsp = asset_server.load("maps/de_dust2.bsp#Map");
+    let bsp = asset_server.load("maps/halflife_c1a0.bsp#Map");
     commands.spawn_scene(bsp);
 
     let perspective_projection = PerspectiveProjection {

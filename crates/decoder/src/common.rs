@@ -1,7 +1,7 @@
 use std::io::{Read, Seek};
 
 use byteorder::{LittleEndian, ReadBytesExt};
-use glam::{UVec2, Vec3};
+use glam::Vec3;
 
 use crate::Result;
 
@@ -71,11 +71,4 @@ pub(crate) fn read_vec3<R: Read + Seek>(reader: &mut R) -> Result<Vec3> {
     let z = reader.read_f32::<LittleEndian>()?;
 
     Ok(Vec3::new(x, y, z))
-}
-
-pub(crate) fn read_uvec2_u16<R: Read + Seek>(reader: &mut R) -> Result<UVec2> {
-    let x = reader.read_u16::<LittleEndian>()? as u32;
-    let y = reader.read_u16::<LittleEndian>()? as u32;
-
-    Ok(UVec2::new(x, y))
 }

@@ -9,7 +9,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::common::{
     read_array_f32, read_array_i16, read_array_i32, read_array_u16, read_array_u32, read_array_u8,
-    read_uvec2_u16, read_vec3,
+    read_vec3,
 };
 use crate::{Error, Result};
 
