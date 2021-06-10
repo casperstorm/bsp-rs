@@ -1,7 +1,7 @@
 use bevy::pbr::AmbientLight;
 use bevy::prelude::*;
 use bevy::render::camera::PerspectiveProjection;
-use bevy::render::wireframe::{WireframeConfig, WireframePlugin};
+use bevy::render::wireframe::WireframePlugin;
 use bevy::wgpu::{WgpuFeature, WgpuFeatures, WgpuOptions};
 use bevy_bsp::BspPlugin;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
@@ -34,15 +34,9 @@ fn main() {
         .run();
 }
 
-fn setup(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut wireframe_config: ResMut<WireframeConfig>,
-) {
-    // To draw the wireframe on all entities, set this to 'true'
-    wireframe_config.global = false;
-
-    commands.spawn_scene(asset_server.load("maps/de_inferno.bsp#Map"));
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let bsp = asset_server.load("maps/de_dust2.bsp#Map");
+    commands.spawn_scene(bsp);
 
     let perspective_projection = PerspectiveProjection {
         fov: 90.0,
@@ -58,9 +52,10 @@ fn setup(
             ..Default::default()
         })
         .insert(FlyCamera {
-            max_speed: 50.0,
-            accel: 50.0,
-            friction: 49.0,
+            max_speed: 500.0,
+            accel: 1000.0,
+            friction: 975.0,
+            sensitivity: 10.0,
             ..Default::default()
         });
 

@@ -8,8 +8,8 @@ use std::mem::size_of;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::common::{
-    read_array_f32, read_array_i16, read_array_i32, read_array_u32, read_array_u8, read_uvec2_u16,
-    read_vec3,
+    read_array_f32, read_array_i16, read_array_i32, read_array_u16, read_array_u32, read_array_u8,
+    read_uvec2_u16, read_vec3,
 };
 use crate::{Error, Result};
 
@@ -29,6 +29,7 @@ pub struct GoldSrc30Bsp {
     pub vertices: Vec<Vertex>,
     pub nodes: Vec<Node>,
     pub leaves: Vec<Leaf>,
+    pub mark_surfaces: Vec<MarkSurface>,
     pub visibility: Vec<Visibility>,
     pub texture_info: Vec<TextureInfo>,
     pub faces: Vec<Face>,
@@ -71,6 +72,7 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
     let faces = decode_lump::<Face, R>(reader, &header, LumpType::Faces)?;
     let lighting = decode_lump::<Lighting, R>(reader, &header, LumpType::Lighting)?;
     let leaves = decode_lump::<Leaf, R>(reader, &header, LumpType::Leaves)?;
+    let mark_surfaces = decode_lump::<MarkSurface, R>(reader, &header, LumpType::Marksurfaces)?;
     let edges = decode_lump::<Edge, R>(reader, &header, LumpType::Edges)?;
     let surf_edges = decode_lump::<SurfEdge, R>(reader, &header, LumpType::Surfedges)?;
     let models = decode_lump::<Model, R>(reader, &header, LumpType::Models)?;
@@ -87,6 +89,7 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
         vertices,
         nodes,
         leaves,
+        mark_surfaces,
         visibility,
         texture_info,
         faces,
@@ -268,7 +271,7 @@ impl Lump for Plane {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Edge {
-    pub vertex: glam::UVec2,
+    pub vertex: [u16; 2],
 }
 
 impl Lump for Edge {
@@ -276,7 +279,7 @@ impl Lump for Edge {
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Edge> {
         Ok(Edge {
-            vertex: read_uvec2_u16(reader)?,
+            vertex: read_array_u16(reader)?,
         })
     }
 }
@@ -537,6 +540,17 @@ impl Texture {
             palette,
             mip,
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct MarkSurface(pub u16);
+
+impl Lump for MarkSurface {
+    type Output = MarkSurface;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Self::Output> {
+        Ok(Self(reader.read_u16::<LittleEndian>()?))
     }
 }
 

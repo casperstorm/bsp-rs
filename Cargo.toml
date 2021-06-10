@@ -18,4 +18,3 @@ bevy_bsp = { path = "./crates/bevy_bsp" }
 anyhow = "1.0"
 bevy = "0.5" 
 bevy_fly_camera = "0.7.0"
-

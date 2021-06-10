@@ -45,6 +45,16 @@ pub(crate) fn read_array_u8<R: Read + Seek, const N: usize>(reader: &mut R) -> R
     Ok(array)
 }
 
+pub(crate) fn read_array_u16<R: Read + Seek, const N: usize>(reader: &mut R) -> Result<[u16; N]> {
+    let mut array = [0; N];
+
+    for i in array.iter_mut() {
+        *i = reader.read_u16::<LittleEndian>()?;
+    }
+
+    Ok(array)
+}
+
 pub(crate) fn read_array_u32<R: Read + Seek, const N: usize>(reader: &mut R) -> Result<[u32; N]> {
     let mut array = [0; N];
 
