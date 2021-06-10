@@ -1,6 +1,5 @@
 use bevy::diagnostic::{Diagnostics, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
-use bevy_fly_camera::FlyCamera;
 
 pub struct FpsPlugin;
 
@@ -39,30 +38,6 @@ pub fn spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
                             color: Color::GOLD,
                         },
                     },
-                    TextSection {
-                        value: "\n".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/iosevka-regular.ttf"),
-                            font_size: 60.0,
-                            color: Color::GOLD,
-                        },
-                    },
-                    TextSection {
-                        value: "Coords:".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/iosevka-bold.ttf"),
-                            font_size: 60.0,
-                            color: Color::WHITE,
-                        },
-                    },
-                    TextSection {
-                        value: "".to_string(),
-                        style: TextStyle {
-                            font: asset_server.load("fonts/iosevka-regular.ttf"),
-                            font_size: 60.0,
-                            color: Color::GOLD,
-                        },
-                    },
                 ],
                 ..Default::default()
             },
@@ -71,22 +46,13 @@ pub fn spawn(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(FpsText);
 }
 
-fn text_update_system(
-    diagnostics: Res<Diagnostics>,
-    mut query: Query<&mut Text, With<FpsText>>,
-    camera: Query<(&FlyCamera, &Transform)>,
-) {
+fn text_update_system(diagnostics: Res<Diagnostics>, mut query: Query<&mut Text, With<FpsText>>) {
     for mut text in query.iter_mut() {
         if let Some(fps) = diagnostics.get(FrameTimeDiagnosticsPlugin::FPS) {
             if let Some(average) = fps.average() {
                 // Update the value of the second section
                 text.sections[1].value = format!("{:.2}", average);
             }
-        }
-
-        if let Some((_, transform)) = camera.iter().next() {
-            let coords = transform.translation;
-            text.sections[4].value = format!("({},{},{})", coords.x, coords.y, coords.z);
         }
     }
 }
