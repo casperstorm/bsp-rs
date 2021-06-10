@@ -8,17 +8,21 @@ use std::mem::size_of;
 use byteorder::{LittleEndian, ReadBytesExt};
 
 use crate::common::{
-    read_array_f32, read_array_i16, read_array_i32, read_array_u8, read_uvec2_u16, read_vec3,
+    read_array_f32, read_array_i16, read_array_i32, read_array_u32, read_array_u8, read_uvec2_u16,
+    read_vec3,
 };
 use crate::{Error, Result};
 
 const NUM_LUMPS: usize = 16;
 const MAX_MAP_HULLS: usize = 4;
+const MAXTEXTURENAME: usize = 16;
+const MIPLEVELS: usize = 4;
 
 #[derive(Clone)]
 pub struct GoldSrc30Bsp {
     pub models: Vec<Model>,
     pub planes: Vec<Plane>,
+    pub textures: Vec<Texture>,
     pub edges: Vec<Edge>,
     pub surf_edges: Vec<SurfEdge>,
     pub lighting: Vec<Lighting>,
@@ -71,9 +75,12 @@ pub(crate) fn decode<R: Read + Seek>(reader: &mut R, ident: i32) -> Result<GoldS
     let surf_edges = decode_lump::<SurfEdge, R>(reader, &header, LumpType::Surfedges)?;
     let models = decode_lump::<Model, R>(reader, &header, LumpType::Models)?;
 
+    let textures = decode_textures(reader, &header)?;
+
     Ok(GoldSrc30Bsp {
         models,
         planes,
+        textures,
         edges,
         surf_edges,
         lighting,
@@ -120,6 +127,32 @@ fn decode_lump<L: Lump, R: Read + Seek>(
     }
 
     Ok(items)
+}
+
+fn decode_textures<R: Read + Seek>(reader: &mut R, header: &Header) -> Result<Vec<Texture>> {
+    let lump = header.lumps[LumpType::Textures as usize];
+
+    reader.seek(SeekFrom::Start(lump.file_offset as u64))?;
+
+    let num_textures = reader.read_u32::<LittleEndian>()? as usize;
+
+    let mut offsets = vec![0; num_textures];
+
+    for offset in offsets.iter_mut() {
+        *offset = reader.read_u32::<LittleEndian>()? as usize;
+    }
+
+    let mut textures = Vec::with_capacity(num_textures);
+
+    for offset in offsets {
+        reader.seek(SeekFrom::Start((lump.file_offset as usize + offset) as u64))?;
+
+        let texture = Texture::decode(reader)?;
+
+        textures.push(texture);
+    }
+
+    Ok(textures)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -444,6 +477,27 @@ impl Lump for Face {
             texture_info: reader.read_u16::<LittleEndian>()?,
             styles: read_array_u8(reader)?,
             lightmap_offset: reader.read_u32::<LittleEndian>()?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Texture {
+    pub name: [u8; MAXTEXTURENAME],
+    pub width: u32,
+    pub height: u32,
+    pub offsets: [u32; MIPLEVELS],
+}
+
+impl Lump for Texture {
+    type Output = Texture;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Texture> {
+        Ok(Texture {
+            name: read_array_u8(reader)?,
+            width: reader.read_u32::<LittleEndian>()?,
+            height: reader.read_u32::<LittleEndian>()?,
+            offsets: read_array_u32(reader)?,
         })
     }
 }

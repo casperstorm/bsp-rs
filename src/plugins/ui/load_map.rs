@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy_bsp::BspConfig;
 
 pub struct LoadMapPlugin;
 
@@ -74,6 +75,7 @@ fn button_system(
         (Changed<Interaction>, With<Button>),
     >,
     mut text_query: Query<&mut Text>,
+    mut bsp_config: ResMut<BspConfig>,
 ) {
     for (interaction, mut material, children) in interaction_query.iter_mut() {
         let mut text = text_query.get_mut(children[0]).unwrap();
@@ -81,6 +83,8 @@ fn button_system(
             Interaction::Clicked => {
                 text.sections[0].value = "Press".to_string();
                 *material = button_materials.pressed.clone();
+
+                bsp_config.show_wireframe = !bsp_config.show_wireframe;
             }
             Interaction::Hovered => {
                 text.sections[0].value = "Hover".to_string();
