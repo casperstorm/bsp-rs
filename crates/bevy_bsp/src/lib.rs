@@ -199,6 +199,10 @@ fn load_gold_src_format(
         meshes.push(handle);
     }
 
+    let bounding_box = [model.mins, model.maxs];
+
+    println!("Worldspawn bounding box: {:?}", bounding_box);
+
     let mut world = World::default();
     world
         .spawn()
