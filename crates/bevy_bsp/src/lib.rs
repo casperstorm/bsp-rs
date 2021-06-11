@@ -85,6 +85,7 @@ struct BspDebugVolume {
 }
 
 struct BspTexture {
+    idx: usize,
     material: Handle<StandardMaterial>,
     is_transparent: bool,
 }
@@ -177,6 +178,7 @@ fn load_gold_src_format(
             );
 
             let texture = BspTexture {
+                idx,
                 material: mat_handle,
                 is_transparent: transparent,
             };
@@ -343,7 +345,10 @@ fn load_gold_src_format(
                         load_context.set_labeled_asset("FaceColor", LoadedAsset::new(material));
 
                     for face in faces.into_iter() {
-                        let texture = face.idx_miptex.map(|idx| textures.get(idx)).flatten();
+                        let texture = face
+                            .idx_miptex
+                            .map(|idx| textures.iter().find(|t| t.idx == idx))
+                            .flatten();
 
                         parent
                             .spawn_bundle(PbrBundle {
