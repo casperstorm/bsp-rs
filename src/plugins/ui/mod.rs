@@ -1,15 +1,15 @@
 use bevy::prelude::*;
 
-pub mod fps;
-pub mod load_map;
+pub mod buttons;
+pub mod info;
 
-use fps::FpsPlugin;
-use load_map::LoadMapPlugin;
+use buttons::ButtonsPlugin;
+use info::InfoPlugin;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut AppBuilder) {
-        app.add_plugin(FpsPlugin).add_plugin(LoadMapPlugin);
+        app.add_plugin(InfoPlugin).add_plugin(ButtonsPlugin);
     }
 }

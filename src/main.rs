@@ -1,3 +1,5 @@
+use std::fs;
+
 use bevy::pbr::AmbientLight;
 use bevy::prelude::*;
 use bevy::render::camera::PerspectiveProjection;
@@ -30,19 +32,57 @@ fn main() {
             color: Color::WHITE,
             brightness: 2.5 / 5.0f32,
         })
+        .insert_resource(AppState::default())
+        .add_event::<Event>()
         .add_plugins(DefaultPlugins)
         .add_plugin(WireframePlugin)
         .add_plugin(UiPlugin)
         .add_plugin(FlyCameraPlugin)
         .add_plugin(BspPlugin)
         .add_system(cursor_grab_system.system())
+        .add_system(change_map_system.system())
         .add_startup_system(setup.system())
         .run();
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let bsp = asset_server.load("maps/halflife_c1a0.bsp#Map");
-    commands.spawn_scene(bsp);
+#[derive(Debug, Clone, Default)]
+struct AppState {
+    scene_entity: Option<Entity>,
+    maps: Vec<Map>,
+    current_map: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+struct Map {
+    name: String,
+    scene_handle: Option<Handle<Scene>>,
+}
+
+fn setup(mut commands: Commands, mut state: ResMut<AppState>, mut events: EventWriter<Event>) {
+    let mut maps = vec![];
+
+    if let Ok(dir) = fs::read_dir("assets/maps") {
+        for entry in dir.flatten() {
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.ends_with(".bsp") {
+                    //let scene_handle = asset_server.load(format!("maps/{}#Map", &name).as_str());
+
+                    maps.push(Map {
+                        name,
+                        scene_handle: None,
+                    });
+                }
+            }
+        }
+    }
+    maps.sort_by_key(|m| m.name.clone());
+
+    state.maps = maps;
+
+    // Load first map
+    if !state.maps.is_empty() {
+        events.send(Event::LoadMap(0));
+    }
 
     let perspective_projection = PerspectiveProjection {
         fov: 90.0,
@@ -94,5 +134,47 @@ fn cursor_grab_system(
         query.iter_mut().for_each(|mut fly| {
             fly.enabled = false;
         });
+    }
+}
+
+enum Event {
+    LoadMap(usize),
+}
+
+fn change_map_system(
+    mut events: EventReader<Event>,
+    mut state: ResMut<AppState>,
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut scene_spawner: ResMut<SceneSpawner>,
+) {
+    for event in events.iter() {
+        match event {
+            Event::LoadMap(idx) => {
+                // Despawn current scene
+                if let Some(entity) = state.scene_entity.take() {
+                    commands.entity(entity).despawn_recursive();
+                }
+
+                let scene_entity = if let Some(map) = state.maps.get_mut(*idx) {
+                    // TODO: Load new scene. Check if map scene has already been loaded, otherwise load
+                    let scene_handle = map.scene_handle.clone().unwrap_or_else(|| {
+                        asset_server.load(format!("maps/{}#Map", &map.name).as_str())
+                    });
+
+                    map.scene_handle = Some(scene_handle.clone());
+
+                    let scene_entity = commands.spawn().id();
+                    scene_spawner.spawn_as_child(scene_handle, scene_entity);
+
+                    scene_entity
+                } else {
+                    continue;
+                };
+
+                state.scene_entity = Some(scene_entity);
+                state.current_map = Some(*idx);
+            }
+        }
     }
 }
