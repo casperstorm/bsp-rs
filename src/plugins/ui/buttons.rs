@@ -34,6 +34,7 @@ impl Plugin for ButtonsPlugin {
 enum ButtonType {
     WireFrame,
     NextMap,
+    PreviousMap,
 }
 
 pub fn spawn(
@@ -128,6 +129,45 @@ pub fn spawn(
             });
         })
         .insert(ButtonType::NextMap);
+
+    commands
+        .spawn_bundle(ButtonBundle {
+            style: Style {
+                size: Size::new(Val::Px(150.0), Val::Px(65.0)),
+                align_self: AlignSelf::FlexEnd,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                position_type: PositionType::Absolute,
+                position: Rect {
+                    top: Val::Px(15.0),
+                    right: Val::Px(15.0 + 150.0 * 2.0 + 15.0 * 2.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            material: button_materials.normal.clone(),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent.spawn_bundle(TextBundle {
+                text: Text {
+                    sections: vec![TextSection {
+                        value: "Prev Map".to_string(),
+                        style: TextStyle {
+                            font: asset_server.load("fonts/iosevka-regular.ttf"),
+                            font_size: 40.0,
+                            color: Color::rgb(0.9, 0.9, 0.9),
+                        },
+                    }],
+                    alignment: TextAlignment {
+                        horizontal: HorizontalAlign::Center,
+                        ..Default::default()
+                    },
+                },
+                ..Default::default()
+            });
+        })
+        .insert(ButtonType::PreviousMap);
 }
 
 #[allow(clippy::type_complexity)]
@@ -146,6 +186,7 @@ fn button_system(
     mut bsp_config: ResMut<BspConfig>,
     mut events: EventWriter<Event>,
     state: Res<AppState>,
+    scene_spawner: Res<SceneSpawner>,
 ) {
     for (interaction, mut material, children, button_type) in interaction_query.iter_mut() {
         let mut text = text_query.get_mut(children[0]).unwrap();
@@ -160,6 +201,19 @@ fn button_system(
             text.sections[0].value = value.to_string();
         }
 
+        // Prevent buttons from being clicked if map hasn't spawned fully yet (prevent race condition)
+        if &ButtonType::NextMap == button_type || &ButtonType::PreviousMap == button_type {
+            if let Some(idx) = state.current_map {
+                if let Some(map) = state.maps.get(idx) {
+                    if let Some(instance_id) = map.instance_id {
+                        if !scene_spawner.instance_is_ready(instance_id) {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
         match *interaction {
             Interaction::Clicked => {
                 *material = button_materials.pressed.clone();
@@ -172,6 +226,13 @@ fn button_system(
                         let current_map = state.current_map.unwrap_or_default();
 
                         let new_map = (current_map + 1) % state.maps.len();
+
+                        events.send(Event::LoadMap(new_map));
+                    }
+                    ButtonType::PreviousMap => {
+                        let current_map = state.current_map.unwrap_or_default();
+
+                        let new_map = current_map.wrapping_sub(1).min(state.maps.len() - 1);
 
                         events.send(Event::LoadMap(new_map));
                     }

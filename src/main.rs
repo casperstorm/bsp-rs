@@ -4,6 +4,7 @@ use bevy::pbr::AmbientLight;
 use bevy::prelude::*;
 use bevy::render::camera::PerspectiveProjection;
 use bevy::render::wireframe::WireframePlugin;
+use bevy::scene::InstanceId;
 use bevy::wgpu::{WgpuFeature, WgpuFeatures, WgpuOptions};
 use bevy_bsp::BspPlugin;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
@@ -56,6 +57,7 @@ struct AppState {
 struct Map {
     name: String,
     scene_handle: Option<Handle<Scene>>,
+    instance_id: Option<InstanceId>,
 }
 
 fn setup(mut commands: Commands, mut state: ResMut<AppState>, mut events: EventWriter<Event>) {
@@ -70,6 +72,7 @@ fn setup(mut commands: Commands, mut state: ResMut<AppState>, mut events: EventW
                     maps.push(Map {
                         name,
                         scene_handle: None,
+                        instance_id: None,
                     });
                 }
             }
@@ -165,7 +168,9 @@ fn change_map_system(
                     map.scene_handle = Some(scene_handle.clone());
 
                     let scene_entity = commands.spawn().id();
-                    scene_spawner.spawn_as_child(scene_handle, scene_entity);
+                    let instance_id = scene_spawner.spawn_as_child(scene_handle, scene_entity);
+
+                    map.instance_id = Some(instance_id);
 
                     scene_entity
                 } else {
