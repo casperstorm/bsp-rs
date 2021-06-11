@@ -378,19 +378,19 @@ fn load_gold_src_format(
                         .set_labeled_asset("DebugVolumeColor", LoadedAsset::new(material));
 
                     for debug_volumes in debug_volumes.into_iter() {
-                        //Fix: Add bounding boxes to actual asset handle incase we want to use more than worldspawn in future
-
                         let mins = debug_volumes.mins;
                         let maxs = debug_volumes.maxs;
                         let x = (mins[1] + maxs[1]) / 2.0;
                         let y = (mins[2] + maxs[2]) / 2.0;
                         let z = (mins[0] + maxs[0]) / 2.0;
 
+                        let transform = GlobalTransform::from_xyz(x, y, z);
+
                         parent
                             .spawn_bundle(PbrBundle {
                                 mesh: debug_volumes.mesh,
                                 material: material.clone(),
-                                transform: Transform::from_xyz(x, y, z),
+                                global_transform: transform,
                                 visible: Visible {
                                     is_transparent: true,
                                     ..Default::default()
