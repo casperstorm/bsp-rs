@@ -1,16 +1,19 @@
-use std::io::Cursor;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::io::{BufReader, Cursor};
 
 use anyhow::format_err;
 use bevy::asset::{AssetLoader, LoadContext, LoadedAsset};
-use bevy::prelude::{shape, *};
+use bevy::prelude::{shape, Texture as BevyTexture, *};
 use bevy::reflect::TypeUuid;
 use bevy::render::mesh::Indices;
 use bevy::render::pipeline::PrimitiveTopology;
 use bevy::render::texture::{AddressMode, Extent3d, SamplerDescriptor};
 use bevy::render::wireframe::Wireframe;
 use bevy::utils::BoxedFuture;
+use decoder::format::gold_src_30::Texture;
 use decoder::format::GoldSrc30Bsp;
-use decoder::BspFormat;
+use decoder::{BspFormat, WadDecoder};
 
 #[derive(Debug, Clone, Default)]
 pub struct BspConfig {
@@ -30,9 +33,12 @@ impl Plugin for BspPlugin {
         app.init_asset_loader::<BspFileLoader>()
             .init_resource::<BspConfig>()
             .register_type::<BspMesh>()
-            .register_type::<Wireframe>()
+            .register_type::<BspNeedsWad>()
             .add_asset::<BspFile>()
-            .add_system(add_wireframes_system.system());
+            .insert_resource(WadManager::default())
+            .add_startup_system(load_wads_system.system())
+            .add_system(add_wireframes_system.system())
+            .add_system(apply_wad_textures_system.system());
     }
 }
 
@@ -84,10 +90,17 @@ struct BspDebugVolume {
     maxs: [f32; 3],
 }
 
+#[derive(Debug)]
 struct BspTexture {
     idx: usize,
     material: Handle<StandardMaterial>,
     is_transparent: bool,
+}
+
+#[derive(Debug, Clone, Reflect, Default)]
+#[reflect(Component)]
+struct BspNeedsWad {
+    name: String,
 }
 
 fn load_gold_src_format(
@@ -123,47 +136,14 @@ fn load_gold_src_format(
     let mut textures = vec![];
     let mut faces = vec![];
     let mut debug_volumes = vec![];
+    let mut wad_indexes = HashMap::new();
 
     // Add textures
     for (idx, texture) in bsp.textures.iter().enumerate() {
         // Skip WAD textures
         if texture.offsets[0] > 0 {
-            let mut transparent = false;
-            let mut data = vec![];
+            let (transparent, texture) = parse_texture(&texture);
 
-            let is_tranparent = |r: u8, g: u8, b: u8| -> bool { r == 0 && g == 0 && b == 255 };
-
-            for idx in texture.mip.iter() {
-                let idx = *idx as usize;
-
-                let r = texture.palette[idx.min(255)][0];
-                let g = texture.palette[idx.min(255)][1];
-                let b = texture.palette[idx.min(255)][2];
-
-                data.push(r);
-                data.push(g);
-                data.push(b);
-                data.push(if is_tranparent(r, g, b) { 0 } else { 255 });
-
-                if is_tranparent(r, g, b) {
-                    transparent = true;
-                }
-            }
-
-            let texture = Texture {
-                data,
-                size: Extent3d {
-                    width: texture.width,
-                    height: texture.height,
-                    depth: 1,
-                },
-                sampler: SamplerDescriptor {
-                    address_mode_u: AddressMode::Repeat,
-                    address_mode_v: AddressMode::Repeat,
-                    ..Default::default()
-                },
-                ..Default::default()
-            };
             let tex_handle = load_context
                 .set_labeled_asset(&format!("Texture{}", idx), LoadedAsset::new(texture));
 
@@ -184,6 +164,11 @@ fn load_gold_src_format(
             };
 
             textures.push(texture);
+        } else {
+            let name = String::from_utf8_lossy(&texture.name).to_string();
+            let name = name.split('\0').next().unwrap_or_default().to_string();
+
+            wad_indexes.insert(idx, BspNeedsWad { name });
         }
     }
 
@@ -350,21 +335,29 @@ fn load_gold_src_format(
                             .map(|idx| textures.iter().find(|t| t.idx == idx))
                             .flatten();
 
-                        parent
-                            .spawn_bundle(PbrBundle {
-                                mesh: face.mesh,
-                                material: texture
-                                    .map(|t| t.material.clone())
-                                    .unwrap_or_else(|| default_material.clone()),
-                                visible: Visible {
-                                    is_transparent: texture
-                                        .map(|t| t.is_transparent)
-                                        .unwrap_or_default(),
-                                    ..Default::default()
-                                },
+                        let mut entity = parent.spawn_bundle(PbrBundle {
+                            mesh: face.mesh,
+                            material: texture
+                                .map(|t| t.material.clone())
+                                .unwrap_or_else(|| default_material.clone()),
+                            visible: Visible {
+                                is_transparent: texture
+                                    .map(|t| t.is_transparent)
+                                    .unwrap_or_default(),
                                 ..Default::default()
-                            })
-                            .insert(BspMesh);
+                            },
+                            ..Default::default()
+                        });
+                        entity.insert(BspMesh);
+
+                        if let Some(needs_wad) = face
+                            .idx_miptex
+                            .map(|idx| wad_indexes.get(&idx))
+                            .flatten()
+                            .cloned()
+                        {
+                            entity.insert(needs_wad);
+                        }
                     }
                 }
 
@@ -452,5 +445,141 @@ fn add_wireframes_system(
         query.q1_mut().iter_mut().for_each(|(entity, _)| {
             commands.entity(entity).remove::<Wireframe>();
         })
+    }
+}
+
+#[derive(Debug, Default)]
+struct WadManager {
+    textures: HashMap<String, Texture>,
+}
+
+fn load_wads_system(mut manager: ResMut<WadManager>) {
+    let mut wads = vec![];
+
+    if let Ok(dir) = fs::read_dir("assets/wads") {
+        for entry in dir.flatten() {
+            let path = entry.path();
+
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.ends_with(".wad") {
+                    if let Ok(file) = fs::File::open(path) {
+                        let reader = BufReader::new(file);
+
+                        match WadDecoder::from_reader(reader).decode() {
+                            Ok(wad) => wads.push(wad),
+                            Err(e) => {
+                                dbg!(&e);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    for wad in wads.into_iter() {
+        for (name, texture) in wad.textures.into_iter() {
+            if texture.width > 0 && texture.height > 0 {
+                manager.textures.insert(name, texture);
+            }
+        }
+    }
+}
+
+fn parse_texture(texture: &Texture) -> (bool, BevyTexture) {
+    let mut transparent = false;
+    let mut data = vec![];
+
+    let is_tranparent = |r: u8, g: u8, b: u8| -> bool { r == 0 && g == 0 && b == 255 };
+
+    for idx in texture.mip.iter() {
+        let idx = *idx as usize;
+
+        let r = texture.palette[idx.min(255)][0];
+        let g = texture.palette[idx.min(255)][1];
+        let b = texture.palette[idx.min(255)][2];
+
+        data.push(r);
+        data.push(g);
+        data.push(b);
+        data.push(if is_tranparent(r, g, b) { 0 } else { 255 });
+
+        if is_tranparent(r, g, b) {
+            transparent = true;
+        }
+    }
+
+    (
+        transparent,
+        BevyTexture {
+            data,
+            size: Extent3d {
+                width: texture.width,
+                height: texture.height,
+                depth: 1,
+            },
+            sampler: SamplerDescriptor {
+                address_mode_u: AddressMode::Repeat,
+                address_mode_v: AddressMode::Repeat,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+}
+
+fn apply_wad_textures_system(
+    mut commands: Commands,
+    mut query: Query<(Entity, &BspNeedsWad, &mut Visible)>,
+    manager: Res<WadManager>,
+    mut textures: ResMut<Assets<BevyTexture>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let mut missing_textures = HashSet::new();
+    let mut mat_handles = HashMap::new();
+
+    for (_, wad, _) in query.iter_mut() {
+        missing_textures.insert(wad.name.clone());
+    }
+
+    for name in missing_textures.iter() {
+        if let Some(texture) = manager.textures.get(name) {
+            let (transparent, texture) = parse_texture(&texture);
+
+            let tex_handle = textures.add(texture);
+
+            let material = StandardMaterial {
+                base_color_texture: Some(tex_handle),
+                unlit: true,
+                ..Default::default()
+            };
+            let handle = materials.add(material);
+
+            mat_handles.insert(name.clone(), (transparent, handle));
+        }
+    }
+
+    missing_textures.drain();
+
+    if !mat_handles.is_empty() {
+        for (entity, wad, mut visible) in query.iter_mut() {
+            let mut entity_commands = commands.entity(entity);
+
+            if let Some((is_transparent, material)) = mat_handles.get(&wad.name).cloned() {
+                visible.is_transparent = is_transparent;
+
+                entity_commands.remove::<Handle<StandardMaterial>>();
+                entity_commands.insert(material);
+            } else {
+                missing_textures.insert(wad.name.clone());
+            }
+
+            // No point in trying after first time
+            entity_commands.remove::<BspNeedsWad>();
+        }
+    }
+
+    for name in missing_textures {
+        warn!("WAD texture missing: {}", name);
     }
 }

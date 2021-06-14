@@ -10,6 +10,8 @@ pub enum Error {
     InvalidOrUnimplementedIdent { ident: i32 },
     #[error("Invalid BspFormat used to decode file of version: {version:?}")]
     InvalidBspFormat { version: BspVersion },
+    #[error("Invalid Wad format, must be `WAD2` or `WAD3`")]
+    InvalidWadFormat,
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

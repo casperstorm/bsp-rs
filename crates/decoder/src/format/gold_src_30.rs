@@ -11,11 +11,11 @@ use crate::common::{
     read_array_f32, read_array_i16, read_array_i32, read_array_u16, read_array_u32, read_array_u8,
     read_vec3,
 };
-use crate::{Error, Result};
+use crate::{ByteDecoder, Error, Result};
 
 const NUM_LUMPS: usize = 16;
 const MAX_MAP_HULLS: usize = 4;
-const MAXTEXTURENAME: usize = 16;
+pub const MAXTEXTURENAME: usize = 16;
 const MIPLEVELS: usize = 4;
 
 #[derive(Clone)]
@@ -113,7 +113,7 @@ fn decode_header_lump<R: Read + Seek>(reader: &mut R) -> Result<HeaderLump> {
     Ok(HeaderLump { file_offset, len })
 }
 
-fn decode_lump<L: Lump, R: Read + Seek>(
+fn decode_lump<L: ByteDecoder, R: Read + Seek>(
     reader: &mut R,
     header: &Header,
     lump_type: LumpType,
@@ -150,9 +150,9 @@ fn decode_textures<R: Read + Seek>(reader: &mut R, header: &Header) -> Result<Ve
     for offset in offsets {
         reader.seek(SeekFrom::Start((lump.file_offset as usize + offset) as u64))?;
 
-        let texture = Texture::decode(reader, lump.file_offset as usize + offset)?;
-
-        textures.push(texture);
+        if let Ok(texture) = Texture::decode(reader, lump.file_offset as usize + offset) {
+            textures.push(texture);
+        }
     }
 
     Ok(textures)
@@ -191,12 +191,6 @@ enum LumpType {
     HeaderLumps,
 }
 
-trait Lump {
-    type Output: Copy;
-
-    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Self::Output>;
-}
-
 #[derive(Debug, Clone, Copy)]
 pub struct Model {
     pub mins: [f32; 3],
@@ -208,7 +202,7 @@ pub struct Model {
     pub num_faces: i32,
 }
 
-impl Lump for Model {
+impl ByteDecoder for Model {
     type Output = Model;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Model> {
@@ -257,7 +251,7 @@ impl TryFrom<i32> for PlaneType {
     }
 }
 
-impl Lump for Plane {
+impl ByteDecoder for Plane {
     type Output = Plane;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Plane> {
@@ -274,7 +268,7 @@ pub struct Edge {
     pub vertex: [u16; 2],
 }
 
-impl Lump for Edge {
+impl ByteDecoder for Edge {
     type Output = Edge;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Edge> {
@@ -287,7 +281,7 @@ impl Lump for Edge {
 #[derive(Debug, Clone, Copy)]
 pub struct SurfEdge(pub i32);
 
-impl Lump for SurfEdge {
+impl ByteDecoder for SurfEdge {
     type Output = SurfEdge;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<SurfEdge> {
@@ -302,7 +296,7 @@ pub struct Lighting {
     pub b: u8,
 }
 
-impl Lump for Lighting {
+impl ByteDecoder for Lighting {
     type Output = Lighting;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Lighting> {
@@ -317,7 +311,7 @@ impl Lump for Lighting {
 #[derive(Debug, Clone, Copy)]
 pub struct Vertex(pub glam::Vec3);
 
-impl Lump for Vertex {
+impl ByteDecoder for Vertex {
     type Output = Vertex;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Vertex> {
@@ -335,7 +329,7 @@ pub struct Node {
     pub num_faces: u16,
 }
 
-impl Lump for Node {
+impl ByteDecoder for Node {
     type Output = Node;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Node> {
@@ -405,7 +399,7 @@ impl TryFrom<i32> for Contents {
     }
 }
 
-impl Lump for Leaf {
+impl ByteDecoder for Leaf {
     type Output = Leaf;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Leaf> {
@@ -424,7 +418,7 @@ impl Lump for Leaf {
 #[derive(Debug, Clone, Copy)]
 pub struct Visibility(pub u8);
 
-impl Lump for Visibility {
+impl ByteDecoder for Visibility {
     type Output = Visibility;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Visibility> {
@@ -442,7 +436,7 @@ pub struct TextureInfo {
     pub flags: u32,
 }
 
-impl Lump for TextureInfo {
+impl ByteDecoder for TextureInfo {
     type Output = TextureInfo;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<TextureInfo> {
@@ -468,7 +462,7 @@ pub struct Face {
     pub lightmap_offset: u32,
 }
 
-impl Lump for Face {
+impl ByteDecoder for Face {
     type Output = Face;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Face> {
@@ -495,7 +489,7 @@ pub struct Texture {
 }
 
 impl Texture {
-    fn decode<R: Read + Seek>(reader: &mut R, offset: usize) -> Result<Texture> {
+    pub(crate) fn decode<R: Read + Seek>(reader: &mut R, offset: usize) -> Result<Texture> {
         let name = read_array_u8(reader)?;
         let width = reader.read_u32::<LittleEndian>()?;
         let height = reader.read_u32::<LittleEndian>()?;
@@ -518,15 +512,12 @@ impl Texture {
             ];
         }
 
-        let mut mip = vec![];
-        if offsets[0] > 0 {
-            let mip_offset = offset + offsets[0] as usize;
-            let mip_len = (width * height) as usize;
+        let mip_offset = offset + offsets[0] as usize;
+        let mip_len = (width * height) as usize;
 
-            mip = vec![0; mip_len];
+        let mut mip = vec![0; mip_len];
 
-            reader.seek(SeekFrom::Start(mip_offset as u64))?;
-
+        if reader.seek(SeekFrom::Start(mip_offset as u64)).is_ok() {
             for i in mip.iter_mut() {
                 *i = reader.read_u8().unwrap_or_default();
             }
@@ -546,7 +537,7 @@ impl Texture {
 #[derive(Debug, Clone, Copy)]
 pub struct MarkSurface(pub u16);
 
-impl Lump for MarkSurface {
+impl ByteDecoder for MarkSurface {
     type Output = MarkSurface;
 
     fn decode<R: Read + Seek>(reader: &mut R) -> Result<Self::Output> {

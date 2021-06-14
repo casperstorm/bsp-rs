@@ -5,6 +5,7 @@ use byteorder::{LittleEndian, ReadBytesExt};
 pub(crate) mod common;
 mod error;
 pub mod format;
+pub mod wad;
 
 pub use error::Error;
 
@@ -70,4 +71,25 @@ impl BspVersion {
 #[derive(Debug)]
 pub enum BspFormat {
     GoldSrc30(GoldSrc30Bsp),
+}
+
+#[derive(Debug)]
+pub struct WadDecoder<R: Read + Seek> {
+    reader: R,
+}
+
+impl<R: Read + Seek> WadDecoder<R> {
+    pub fn from_reader(reader: R) -> Self {
+        WadDecoder { reader }
+    }
+
+    pub fn decode(mut self) -> Result<wad::Wad> {
+        wad::decode(&mut self.reader)
+    }
+}
+
+trait ByteDecoder {
+    type Output: Copy;
+
+    fn decode<R: Read + Seek>(reader: &mut R) -> Result<Self::Output>;
 }
