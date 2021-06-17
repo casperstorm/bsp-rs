@@ -516,7 +516,7 @@ fn parse_texture(texture: &Texture) -> (bool, BevyTexture) {
             size: Extent3d {
                 width: texture.width,
                 height: texture.height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             sampler: SamplerDescriptor {
                 address_mode_u: AddressMode::Repeat,
