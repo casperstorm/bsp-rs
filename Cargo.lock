@@ -3652,7 +3652,10 @@ dependencies = [
 name = "rg3d_bsp"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "decoder",
+ "glam 0.14.0",
+ "rayon",
  "rg3d",
 ]
 

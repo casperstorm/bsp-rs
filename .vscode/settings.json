@@ -12,6 +12,9 @@
         "--message-format=json",
         "--all-targets"
     ],
+    "rust-analyzer.diagnostics.disabled": [
+        "mismatched-arg-count"
+    ],
     "[toml]": {
         "editor.formatOnSave": false,
     }

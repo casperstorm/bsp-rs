@@ -7,4 +7,7 @@ edition = "2018"
 [dependencies]
 decoder = { path = "../decoder" }
 
+anyhow = "1.0"
+glam = "0.14"
+rayon = "1.5.1"
 rg3d = "0.20.0"
