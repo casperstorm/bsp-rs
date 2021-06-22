@@ -211,6 +211,14 @@ fn load_gold_src_format(
                     .map(|info| bsp.textures.get(info.idx_miptex as usize))
                     .flatten();
 
+                let tex_name = texture.map(|t| String::from_utf8_lossy(&t.name)).unwrap_or_default();
+                let mut tex_name = tex_name.split('\0');
+                let tex_name = tex_name.next().unwrap_or_default();
+
+                if tex_name == "sky" {
+                    continue;
+                }
+
                 if let Some(plane) = bsp.planes.get(face.plane as usize) {
                     let mut normal = plane.normal;
 
